@@ -10,6 +10,8 @@
 #include <arpa/inet.h>
 #include <netinet/in.h>
 
+#include "handler.h"
+
 static struct sockaddr_in* prepare_listen(const char* port){
 	int status;
 	struct addrinfo hints;
@@ -96,6 +98,8 @@ int main(int argc, char **argv){
 
 		inet_ntop(AF_INET, &remote_addr.sin_addr, ipstr, sizeof(ipstr));
 		printf("connection from %s\n", ipstr);
+
+		handle_connection(client_sockfd);
 
 		close(client_sockfd);
 	}
