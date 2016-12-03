@@ -15,13 +15,16 @@ void handle_connection(int sockfd){
 	}
 	if(childpid == 0){
 		//child
+		int orig_stderr = dup(STDERR_FILENO);
 
 		dup2(sockfd, STDOUT_FILENO);
-		dup2(sockfd, STDIN_FILENO);
-		dup2(sockfd, STDERR_FILENO);
 		close(sockfd);
+		dup2(STDOUT_FILENO, STDIN_FILENO);
+		dup2(STDOUT_FILENO, STDERR_FILENO);
 
 		if(execl("/bin/sh", "sh", NULL) == -1){
+			//print error in server, do not send to connected client
+			dup2(orig_stderr, STDERR_FILENO);
 			perror("exec in conn handler");
 		}
 		exit(0);
