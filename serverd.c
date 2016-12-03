@@ -2,6 +2,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <signal.h>
 #include <errno.h>
 #include <assert.h>
 #include <sys/types.h>
@@ -11,6 +12,19 @@
 #include <netinet/in.h>
 
 #include "handler.h"
+
+
+//server listening socket
+static int srv_sockfd = 0;
+
+static void handle_sigint(int sig){
+	printf("got signal %d\n", sig);
+	if(srv_sockfd){
+		puts("closing socket");
+		close(srv_sockfd);
+	}
+	exit(0);
+}
 
 static struct sockaddr_in* prepare_listen(const char* port){
 	int status;
@@ -50,20 +64,21 @@ static struct sockaddr_in* prepare_listen(const char* port){
 int main(int argc, char **argv){
 	const char *const port = "6699";
 
+	signal(SIGINT, handle_sigint);
+
 	char ipstr[INET_ADDRSTRLEN];
 
 	puts("starting");
 
 	// create socket
-	int srv_sockfd;
 	if((srv_sockfd = socket(AF_INET, SOCK_STREAM | SOCK_CLOEXEC, 0)) == -1){
 		perror("socket");
 		exit(1);
 	}
-	//TODO propper cleanup on exit
+	
 	int reuse = 1;
-	if (setsockopt(srv_sockfd, SOL_SOCKET, SO_REUSEADDR, (const char*)&reuse, sizeof(reuse)) < 0){
-        	perror("setsockopt(SO_REUSEADDR) failed");
+	if(setsockopt(srv_sockfd, SOL_SOCKET, SO_REUSEADDR, (const char*)&reuse, sizeof(reuse)) == -1){
+        	perror("setsockopt (SO_REUSEADDR)");
 	}
 
 	// get local listening addr
