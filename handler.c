@@ -1,14 +1,18 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <stdlib.h>
+#include <assert.h>
 #include <sys/wait.h>
+#include <sys/socket.h>
 
 #include "handler.h"
+
+int childpid = 0;
+
 
 void handle_connection(int sockfd){
 	printf("handling sockfd %d\n", sockfd);
 
-	int childpid;
 	if((childpid = fork()) == -1){
 		perror("fork");
 		exit(1);
@@ -30,9 +34,13 @@ void handle_connection(int sockfd){
 		exit(0);
 	}else{
 		printf("Successfully forked %d\n", childpid);
-		close(sockfd);
 		waitpid(childpid, NULL, 0);
 		printf("child %d exited\n", childpid);
+		childpid = 0; //child dead?
+		if(shutdown(sockfd, SHUT_RDWR) == -1)
+			perror("shutdown child's sockfd");
+		if(close(sockfd) == -1)
+			perror("close child's sockfd");
 	}
 
 }

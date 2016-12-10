@@ -17,13 +17,29 @@
 //server listening socket
 static int srv_sockfd = 0;
 
+static void shutdown_socket(int sockfd){
+	if(srv_sockfd){
+		puts("shutdown socket");
+		if(shutdown(sockfd, SHUT_RDWR) == -1)
+			perror("shutdown in signal handler");
+		if(close(sockfd) == 1)
+			perror("close in signal handler");
+	}
+}
+
+static int sig_exit_cnt = 0;
+
 static void handle_sigint(int sig){
 	printf("got signal %d\n", sig);
-	if(srv_sockfd){
-		puts("closing socket");
-		close(srv_sockfd);
+	if(childpid){
+		printf("running child: %d\n", childpid);
 	}
-	exit(0);
+	++sig_exit_cnt;
+	if(sig_exit_cnt >= 2){
+		shutdown_socket(srv_sockfd);
+		exit(0);
+	}
+	printf("press %d more times to exit\n", 2 - sig_exit_cnt);
 }
 
 static struct sockaddr_in* prepare_listen(const char* port){
