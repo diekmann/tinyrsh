@@ -18,7 +18,7 @@ sockLoop srvSock = do
 	(remoteSock, remoteAddr) <- accept srvSock
 	putStrLn $ "client connected: " ++ show remoteAddr
 	hdl <- socketToHandle remoteSock ReadWriteMode
-	handleClient $hdl
+	handleClient hdl
 	sockLoop srvSock
 
 handleClient :: Handle -> IO ()
@@ -26,12 +26,11 @@ handleClient hdl = do
 	pid <- forkProcess (doChild hdl)
 	putStrLn $ "forked pid: " ++ show pid
 	hClose hdl
-	putStrLn "client disconnected"
 
 doChild :: Handle -> IO ()
 doChild hdl = do
 	hPutStrLn hdl "Hello World\n"
-	executeFile "/bin/sh" False [] Nothing
+	executeFile "/bin/uname" False [] Nothing
 	putStrLn "unreachable"
 	
 
