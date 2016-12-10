@@ -2,6 +2,7 @@ module Main where
 
 import System.IO
 import Network.Socket
+import System.Posix.Process (forkProcess, executeFile)
 
 main :: IO ()
 main = do
@@ -22,5 +23,15 @@ sockLoop srvSock = do
 
 handleClient :: Handle -> IO ()
 handleClient hdl = do
-	hPutStrLn hdl "Hello World\n"
+	pid <- forkProcess (doChild hdl)
+	putStrLn $ "forked pid: " ++ show pid
 	hClose hdl
+	putStrLn "client disconnected"
+
+doChild :: Handle -> IO ()
+doChild hdl = do
+	hPutStrLn hdl "Hello World\n"
+	executeFile "/bin/sh" False [] Nothing
+	putStrLn "unreachable"
+	
+
