@@ -3,6 +3,7 @@ module Main where
 import System.IO
 import Network.Socket
 import System.Posix.Process (forkProcess, executeFile)
+import System.Posix.IO (handleToFd, dupTo, stdInput, stdOutput, stdError)
 
 main :: IO ()
 main = do
@@ -30,7 +31,11 @@ handleClient hdl = do
 doChild :: Handle -> IO ()
 doChild hdl = do
 	hPutStrLn hdl "Hello World\n"
-	executeFile "/bin/uname" False [] Nothing
+	sockFd <- handleToFd hdl
+	dupTo sockFd stdInput
+	dupTo sockFd stdOutput
+	dupTo sockFd stdError
+	executeFile "/bin/sh" False [] Nothing
 	putStrLn "unreachable"
 	
 
