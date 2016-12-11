@@ -11,6 +11,17 @@
 
 #define IS_BADF(retval) {badf_errno &= (retval == -1 && errno == EBADF);}
 
+static void try_proc_fd(int fd){
+	int written;
+	char buf[256];
+	char outbuf[1024] = {0};
+	written = snprintf(buf, 256, "/proc/self/fd/%d", fd);
+	assert(written > 0 && written < 255);
+	written = readlink(buf, outbuf, 1024);
+	assert(written > 0 && written < 1024);
+	printf("%s\n", outbuf);
+}
+
 int main(int argc, char **argv){
 	const long int max_fd = sysconf(_SC_OPEN_MAX);
 	printf("_POSIX_OPEN_MAX: %d\n", _POSIX_OPEN_MAX);
@@ -53,6 +64,7 @@ int main(int argc, char **argv){
 				//flock_nonposix.l_type == F_UNLCK,
 				sigpidrecv,
 				pipesize);
+			try_proc_fd(fd);
 		}
 	
 	}
