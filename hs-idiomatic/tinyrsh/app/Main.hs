@@ -12,17 +12,22 @@ main = do
     setSocketOption srvSock ReuseAddr 1
     bind srvSock (SockAddrInet 6699 iNADDR_ANY)
     listen srvSock 1
-    sockLoop srvSock
+    sockLoop srvSock []
 
-sockLoop :: Socket -> IO ()
-sockLoop srvSock = do
+sockLoop :: Socket -> [SysProc.ProcessHandle] -> IO ()
+sockLoop srvSock runningProcesses = do
     (remoteSock, remoteAddr) <- accept srvSock
+    mapM_ reapAndPrint runningProcesses
     putStrLn $ "client connected: " ++ show remoteAddr
     hdl <- socketToHandle remoteSock ReadWriteMode
-    handleClient hdl
-    sockLoop srvSock
+    ph <- handleClient hdl
+    sockLoop srvSock (ph:runningProcesses)
+        where reapAndPrint ph = SysProc.getProcessExitCode ph >>= \ex -> 
+                                   case ex of
+                                       Nothing -> putStrLn "  still running"
+                                       Just exitcode -> putStrLn ("  exited: " ++ show exitcode)
 
-handleClient :: Handle -> IO ()
+handleClient :: Handle -> IO SysProc.ProcessHandle
 handleClient hdl = do
     putStrLn $ "handle client"
     let shProcess = (SysProc.proc "/bin/sh" []){ SysProc.std_in = SysProc.UseHandle hdl,
@@ -31,7 +36,5 @@ handleClient hdl = do
                                                  SysProc.close_fds = True }
     (Nothing, Nothing, Nothing, ph) <- SysProc.createProcess shProcess
     putStrLn $ "created Process"
-    --as in the C version, we wait while a client is connected
-    exitcode <- SysProc.waitForProcess ph
-    putStrLn $ show exitcode
+    return ph
 
