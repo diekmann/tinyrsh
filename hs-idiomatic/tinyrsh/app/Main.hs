@@ -4,7 +4,7 @@ import Data.Maybe (isNothing, isJust)
 import System.IO
 import Network.Socket
 import qualified System.Process as SysProc
-
+import qualified System.Process.Internals as SysProcInt (withProcessHandle, ProcessHandle__(..))
 
 main :: IO ()
 main = do
@@ -14,6 +14,8 @@ main = do
     bind srvSock (SockAddrInet 6699 iNADDR_ANY)
     listen srvSock 1
     sockLoop srvSock []
+
+--TODO also reap childs if SIGCHLD
 
 sockLoop :: Socket -> [SysProc.ProcessHandle] -> IO ()
 sockLoop srvSock runningProcesses = do
@@ -26,12 +28,17 @@ sockLoop srvSock runningProcesses = do
 
 reapAndPrint :: [SysProc.ProcessHandle] -> IO [SysProc.ProcessHandle]
 reapAndPrint phs = do
-    exs <- mapM SysProc.getProcessExitCode phs
-    mapM_ printExitCode exs
+    exs <- (mapM SysProc.getProcessExitCode phs)
+    let handlesAndExitCodes = zip phs exs
+    putStrLn "Child status:"
+    mapM_ printExitCode handlesAndExitCodes
     --only keep those which have not yet exited
-    return [ph | (ph, exitcode) <- zip phs exs, isNothing exitcode]
-    where printExitCode Nothing = putStrLn "  still running"
-          printExitCode (Just exitcode) = putStrLn ("  exited: " ++ show exitcode)
+    return [ph | (ph, exitcode) <- handlesAndExitCodes, isNothing exitcode]
+    where printExitCode (ph, Nothing) = getPid ph >>= \s -> putStrLn $ "  "++ s ++ " still running"
+          printExitCode (ph, (Just exitcode)) = getPid ph >>= \s -> putStrLn $ "  " ++ s ++ " exited: " ++ show exitcode
+          getPid ph = SysProcInt.withProcessHandle ph (\phint -> case phint of
+                                                                    SysProcInt.OpenHandle h -> return ("[" ++ show h ++ "]")
+                                                                    SysProcInt.ClosedHandle _ -> return "")
 
 handleClient :: Handle -> IO SysProc.ProcessHandle
 handleClient hdl = do
