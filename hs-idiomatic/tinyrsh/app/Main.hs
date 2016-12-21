@@ -2,6 +2,7 @@ module Main where
 
 import System.IO
 import Network.Socket
+import qualified System.Process as SysProc
 import qualified Lib
 
 
@@ -26,4 +27,9 @@ sockLoop srvSock = do
 handleClient :: Handle -> IO ()
 handleClient hdl = do
     putStrLn $ "handle client"
+    let shProcess = (SysProc.proc "/bin/sh" []){ SysProc.std_out = SysProc.UseHandle hdl,
+                                                 SysProc.std_in = SysProc.UseHandle hdl,
+                                                 SysProc.std_err = SysProc.UseHandle hdl }
+    (cin, cout, cerr, ph) <- SysProc.createProcess shProcess
+    putStrLn $ "created Process " ++ show cin
 

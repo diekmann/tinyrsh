@@ -27,6 +27,7 @@ executable tinyrsh-exe
   build-depends:       base
                      , tinyrsh
                      , network
+                     , process
   default-language:    Haskell2010
 
 test-suite tinyrsh-test
