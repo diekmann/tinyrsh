@@ -31,5 +31,7 @@ handleClient hdl = do
                                                  SysProc.close_fds = True }
     (Nothing, Nothing, Nothing, ph) <- SysProc.createProcess shProcess
     putStrLn $ "created Process"
-    --TODO: reap zombies, make interactive python spawning possible.
+    --as in the C version, we wait while a client is connected
+    exitcode <- SysProc.waitForProcess ph
+    putStrLn $ show exitcode
 
