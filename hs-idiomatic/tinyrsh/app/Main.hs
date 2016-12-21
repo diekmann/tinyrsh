@@ -32,4 +32,5 @@ handleClient hdl = do
                                                  SysProc.std_err = SysProc.UseHandle hdl }
     (cin, cout, cerr, ph) <- SysProc.createProcess shProcess
     putStrLn $ "created Process " ++ show cin
+    --TODO: reap zombies, make interactive python spawning possible.
 
