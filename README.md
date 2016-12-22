@@ -24,3 +24,6 @@ All implementations start a basic server with `socket`, `bind`, `listen`, `accep
    - problem: printing low level debug information (pids if childs, ...) is hard. Overall, this is still the nicest implementation
 
 None of these implementation spawns a terminal. It is not possible to do `su` or open a python shell.
+
+
+In `py-ptysh`, a very very very hacky helper script to spawn a `/bin/sh/` attached to a terminal can be found.
