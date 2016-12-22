@@ -27,3 +27,6 @@ None of these implementation spawns a terminal. It is not possible to do `su` or
 
 
 In `py-ptysh`, a very very very hacky helper script to spawn a `/bin/sh/` attached to a terminal can be found.
+
+
+In `tinyrsh` resides the current working trunk of the actual implementation. Based on `rsh-impls/hs-idiomatic`.
