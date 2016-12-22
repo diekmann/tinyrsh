@@ -5,6 +5,7 @@ import System.IO
 import Network.Socket
 import qualified System.Process as SysProc
 import qualified System.Process.Internals as SysProcInt (withProcessHandle, ProcessHandle__(..))
+import Control.Concurrent.MVar
 
 main :: IO ()
 main = do
@@ -13,20 +14,29 @@ main = do
     setSocketOption srvSock ReuseAddr 1
     bind srvSock (SockAddrInet 6699 iNADDR_ANY)
     listen srvSock 1
-    sockLoop srvSock []
+    runningProcesses <- newMVar []
+    sockLoop srvSock runningProcesses
 
 --TODO also reap childs if SIGCHLD
 
-sockLoop :: Socket -> [SysProc.ProcessHandle] -> IO ()
+sockLoop :: Socket -> MVar [SysProc.ProcessHandle] -> IO ()
 sockLoop srvSock runningProcesses = do
+    
     (remoteSock, remoteAddr) <- accept srvSock
-    runningProcesses <- reapAndPrint runningProcesses
+
+    rp <- takeMVar runningProcesses
+    rp <- reapAndPrint rp
+    --TODO: sleep and test asynchronous signal handling here
+    putMVar runningProcesses rp
+
     putStrLn $ "client connected: " ++ show remoteAddr
     hdl <- socketToHandle remoteSock ReadWriteMode
     ph <- handleClient hdl
-    sockLoop srvSock (ph:runningProcesses)
+    modifyMVar_ runningProcesses (\rp -> return (ph:rp))
+    sockLoop srvSock runningProcesses
 
 reapAndPrint :: [SysProc.ProcessHandle] -> IO [SysProc.ProcessHandle]
+reapAndPrint [] = return []
 reapAndPrint phs = do
     exs <- (mapM SysProc.getProcessExitCode phs)
     let handlesAndExitCodes = zip phs exs
