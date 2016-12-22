@@ -15,7 +15,8 @@ import sys
 __all__ = ["openpty","fork","spawn"]
 
 #yes, this file is a copy of the python builtin pty lib
-sys.stderr.write("corny's hacked pty lib")
+sys.stderr.write("Proudly presented by corny's hacked pty lib\n")
+sys.stderr.flush()
 
 STDIN_FILENO = 0
 STDOUT_FILENO = 1
