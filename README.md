@@ -2,7 +2,7 @@
 If you can read this, I never finished what started
 
 
-### Overview
+### Overview: Basic `nc -e` Implementation
 In this small repository, I test different ways to implement a small, insecure, incomplete implementation of a remote shell.
 The `rsh-impls` folder contains some different attempts to build a remote shell. 
 All implementations start a basic server with `socket`, `bind`, `listen`, `accept`.
@@ -26,7 +26,17 @@ All implementations start a basic server with `socket`, `bind`, `listen`, `accep
 None of these implementation spawns a terminal. It is not possible to do `su` or open a python shell.
 
 
-In `py-ptysh`, a very very very hacky helper script to spawn a `/bin/sh/` attached to a terminal can be found.
+### Overview: Get a Terminal
+In `py-ptysh`, a very very very hacky helper script to spawn a `/bin/sh` attached to a terminal can be found.
+I patched the built-in pty module for this to work.
+Reason: when the remote client disconnects, the shell process is not terminated and hanging around indefinitely.
+Patch: If STDIN seems closed, proceed to close the whole process. Assumes that `/bin/sh` exits by itself at this point.
 
 
-In `tinyrsh` resides the current working trunk of the actual implementation. Based on `rsh-impls/hs-idiomatic`.
+### Current Working Version of tinyrsh
+In `tinyrsh` resides the current working trunk of the actual implementation.
+
+ - based on `rsh-impls/hs-idiomatic`
+ - spawns the python helper to get a shell attached to a terminal
+ - everything is line buffered, `man man` does not give a great experience
+ - `su` and `python` shell over tinyrsh works
