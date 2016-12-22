@@ -19,29 +19,22 @@ main = do
     Sig.installHandler Sig.sigCHLD (Sig.Catch (sigCHLDreaper runningProcesses)) Nothing
     sockLoop srvSock runningProcesses
 
---TODO also reap childs if SIGCHLD
 
 sockLoop :: Socket -> MVar [SysProc.ProcessHandle] -> IO ()
 sockLoop srvSock runningProcesses = do
-    
     (remoteSock, remoteAddr) <- accept srvSock
-
-    rp <- takeMVar runningProcesses
-    rp <- reapAndPrint rp
-    --TODO: sleep and test asynchronous signal handling here
-    putMVar runningProcesses rp
-
     putStrLn $ "client connected: " ++ show remoteAddr
     hdl <- socketToHandle remoteSock ReadWriteMode
     ph <- handleClient hdl
     modifyMVar_ runningProcesses (\rp -> return (ph:rp))
+    modifyMVar_ runningProcesses reapAndPrint
     sockLoop srvSock runningProcesses
 
 
 sigCHLDreaper :: MVar [SysProc.ProcessHandle] -> IO ()
 sigCHLDreaper runningProcesses =  do
-    putStrLn "SIGCHLD"
     rp <- takeMVar runningProcesses
+    putStrLn "SIGCHLD"
     rp <- reapAndPrint rp
     putMVar runningProcesses rp
 
@@ -55,7 +48,7 @@ reapAndPrint phs = do
     mapM_ printExitCode handlesAndExitCodes
     --only keep those which have not yet exited
     return [ph | (ph, exitcode) <- handlesAndExitCodes, isNothing exitcode]
-    where printExitCode (ph, Nothing) = getPid ph >>= \s -> putStrLn $ "  "++ s ++ " still running"
+    where printExitCode (ph, Nothing) = getPid ph >>= \s -> putStrLn $ "  "++ s ++ "  running"
           printExitCode (ph, (Just exitcode)) = getPid ph >>= \s -> putStrLn $ "  " ++ s ++ " exited: " ++ show exitcode
           getPid ph = SysProcInt.withProcessHandle ph (\phint -> case phint of
                                                                     SysProcInt.OpenHandle h -> return ("[" ++ show h ++ "]")
