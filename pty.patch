@@ -1,0 +1,40 @@
+--- /home/corny/Downloads/Python-3.5.2/Lib/pty.py	2016-06-25 23:38:36.000000000 +0200
++++ pty.py	2016-12-22 18:35:03.820256705 +0100
+@@ -5,13 +5,18 @@
+ # See:  W. Richard Stevens. 1992.  Advanced Programming in the
+ #       UNIX Environment.  Chapter 19.
+ # Author: Steen Lumholt -- with additions by Guido.
++#         2016: Cornelius Diekmann hacking untested stuff
+ 
+ from select import select
+ import os
+ import tty
++import sys
+ 
+ __all__ = ["openpty","fork","spawn"]
+ 
++#yes, this file is a copy of the python builtin pty lib
++sys.stderr.write("corny's hacked pty lib")
++
+ STDIN_FILENO = 0
+ STDOUT_FILENO = 1
+ STDERR_FILENO = 2
+@@ -144,6 +149,10 @@
+             data = stdin_read(STDIN_FILENO)
+             if not data:
+                 fds.remove(STDIN_FILENO)
++                # hack by corny: raising OSError if stdin is gone
++                # when having attached this to a `nc -e` and the client disconnects, we want to make sure that we will not leave a process
++                # hanging around forever but we want to terminate at some point. This is basically a broken pipe.
++                raise OSError("STDIN EOF")
+             else:
+                 _writen(master_fd, data)
+ 
+@@ -154,6 +163,7 @@
+     pid, master_fd = fork()
+     if pid == CHILD:
+         os.execlp(argv[0], *argv)
++        assert False, "unreachable or exec failed"
+     try:
+         mode = tty.tcgetattr(STDIN_FILENO)
+         tty.setraw(STDIN_FILENO)
