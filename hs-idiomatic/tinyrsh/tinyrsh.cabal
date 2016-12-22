@@ -28,6 +28,7 @@ executable tinyrsh-exe
                      , tinyrsh
                      , network
                      , process
+                     , unix
   default-language:    Haskell2010
 
 test-suite tinyrsh-test

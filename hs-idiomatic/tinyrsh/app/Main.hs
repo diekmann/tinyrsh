@@ -6,6 +6,7 @@ import Network.Socket
 import qualified System.Process as SysProc
 import qualified System.Process.Internals as SysProcInt (withProcessHandle, ProcessHandle__(..))
 import Control.Concurrent.MVar
+import qualified System.Posix.Signals as Sig
 
 main :: IO ()
 main = do
@@ -15,6 +16,7 @@ main = do
     bind srvSock (SockAddrInet 6699 iNADDR_ANY)
     listen srvSock 1
     runningProcesses <- newMVar []
+    Sig.installHandler Sig.sigCHLD (Sig.Catch (sigCHLDreaper runningProcesses)) Nothing
     sockLoop srvSock runningProcesses
 
 --TODO also reap childs if SIGCHLD
@@ -35,6 +37,15 @@ sockLoop srvSock runningProcesses = do
     modifyMVar_ runningProcesses (\rp -> return (ph:rp))
     sockLoop srvSock runningProcesses
 
+
+sigCHLDreaper :: MVar [SysProc.ProcessHandle] -> IO ()
+sigCHLDreaper runningProcesses =  do
+    putStrLn "SIGCHLD"
+    rp <- takeMVar runningProcesses
+    rp <- reapAndPrint rp
+    putMVar runningProcesses rp
+
+--Helper, TODO move to lib
 reapAndPrint :: [SysProc.ProcessHandle] -> IO [SysProc.ProcessHandle]
 reapAndPrint [] = return []
 reapAndPrint phs = do
