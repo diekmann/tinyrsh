@@ -13,7 +13,7 @@ main = do
     putStrLn "Starting"
     srvSock <- socket AF_INET Stream 0
     setSocketOption srvSock ReuseAddr 1
-    bind srvSock (SockAddrInet 6699 iNADDR_ANY)
+    bind srvSock (SockAddrInet 6699 (tupleToHostAddress (127, 0, 0, 1)))
     listen srvSock 1
     runningProcesses <- newMVar []
     Sig.installHandler Sig.sigCHLD (Sig.Catch (sigCHLDreaper runningProcesses)) Nothing
