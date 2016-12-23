@@ -46,10 +46,23 @@ connectionHandler hdl = do
     where sockrcv hdl = forever $ hGetChar hdl >>= hPutChar stdout
 
 stdinReadLoop hdl = do
-    hasStdIn <- hIsReadable stdin
-    if hasStdIn then do
-        --TODO: does putchar on hdl need synchronization with the above forkIO read thread?
-        hGetChar stdin >>= hPutChar hdl
-        stdinReadLoop hdl
+    hasStdIn <- tryGetChar stdin
+    case hasStdIn of
+        Just c -> do
+             --TODO: does putchar on hdl need synchronization with the above forkIO read thread?
+            hPutChar hdl c
+            stdinReadLoop hdl
+        Nothing -> putStrLn "STDIN closed?"
+
+tryGetChar :: Handle -> IO (Maybe Char)
+tryGetChar hdl = do 
+    canRead <- hIsReadable hdl
+    if canRead then do
+        hdlEOF <- hIsEOF stdin
+        if (not hdlEOF) then do
+            c <- hGetChar hdl
+            return (Just c)
+        else
+            return Nothing
     else
-        putStrLn "STDIN closed?"
+        return Nothing
