@@ -30,7 +30,7 @@ main = do
 
 
 connectionLoop :: Handle -> IO ()
-connectionLoop hdl = do
+connectionLoop hdl = hGetLine hdl >>= putStrLn
     -- TODO: connect stdin and hdl
     -- read:
     -- http://www.mega-nerd.com/erikd/Blog/CodeHacking/Haskell/telnet-conduit.html
