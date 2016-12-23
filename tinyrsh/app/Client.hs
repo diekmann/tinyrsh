@@ -43,7 +43,13 @@ connectionHandler hdl = do
     stdinReadLoop hdl
     putStrLn "cya"
     
-    where sockrcv hdl = forever $ hGetChar hdl >>= hPutChar stdout
+    where sockrcv hdl = do
+            hasSock <- tryGetChar hdl
+            case hasSock of
+                Just c -> do
+                    hPutChar stdout c
+                    sockrcv hdl
+                Nothing -> putStrLn "socket closed?"
 
 stdinReadLoop hdl = do
     hasStdIn <- tryGetChar stdin
@@ -58,7 +64,7 @@ tryGetChar :: Handle -> IO (Maybe Char)
 tryGetChar hdl = do 
     canRead <- hIsReadable hdl
     if canRead then do
-        hdlEOF <- hIsEOF stdin
+        hdlEOF <- hIsEOF hdl
         if (not hdlEOF) then do
             c <- hGetChar hdl
             return (Just c)
