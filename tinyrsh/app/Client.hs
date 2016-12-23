@@ -1,9 +1,10 @@
 module Main where
 
 import Data.Maybe (isNothing, isJust)
-import Control.Monad (when)
+import Control.Monad (when, forever)
 import System.IO
 import Network.Socket
+import Control.Concurrent
 
 main :: IO ()
 main = do
@@ -24,13 +25,31 @@ main = do
     hdlBuff <- hGetBuffering hdl
     putStrLn $ "Have we disabled buffering? " ++ show hdlBuff
 
-    connectionLoop hdl
+    connectionHandler hdl
 
     hClose hdl
 
 
-connectionLoop :: Handle -> IO ()
-connectionLoop hdl = hGetLine hdl >>= putStrLn
-    -- TODO: connect stdin and hdl
-    -- read:
-    -- http://www.mega-nerd.com/erikd/Blog/CodeHacking/Haskell/telnet-conduit.html
+connectionHandler :: Handle -> IO ()
+connectionHandler hdl = do
+    sockRcvThread <- forkIO (sockrcv hdl)
+
+    hSetBuffering stdout NoBuffering
+    hSetBuffering stdin NoBuffering
+    isTTY <- hIsTerminalDevice stdin
+    when isTTY $ do
+        putStrLn "connected to terminal, disabling echo"
+        hSetEcho stdin False
+    stdinReadLoop hdl
+    putStrLn "cya"
+    
+    where sockrcv hdl = forever $ hGetChar hdl >>= hPutChar stdout
+
+stdinReadLoop hdl = do
+    hasStdIn <- hIsReadable stdin
+    if hasStdIn then do
+        --TODO: does putchar on hdl need synchronization with the above forkIO read thread?
+        hGetChar stdin >>= hPutChar hdl
+        stdinReadLoop hdl
+    else
+        putStrLn "STDIN closed?"
