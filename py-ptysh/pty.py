@@ -150,10 +150,11 @@ def _copy(master_fd, master_read=_read, stdin_read=_read):
             data = stdin_read(STDIN_FILENO)
             if not data:
                 fds.remove(STDIN_FILENO)
-                # hack by corny: raising OSError if stdin is gone
+                # hack by corny: send ctrl+d to slave if stdin is gone
                 # when having attached this to a `nc -e` and the client disconnects, we want to make sure that we will not leave a process
                 # hanging around forever but we want to terminate at some point. This is basically a broken pipe.
-                raise OSError("STDIN EOF")
+                print("sending EOF to slave", flush=True)
+                os.write(master_fd, b'\x04')
             else:
                 _writen(master_fd, data)
 
