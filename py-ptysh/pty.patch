@@ -1,6 +1,6 @@
---- /home/corny/Downloads/Python-3.5.2/Lib/pty.py	2016-06-25 23:38:36.000000000 +0200
-+++ pty.py	2016-12-22 18:35:03.820256705 +0100
-@@ -5,13 +5,18 @@
+--- /home/diekmann/Downloads/Python-3.5.2/Lib/pty.py	2016-06-25 23:38:36.000000000 +0200
++++ pty.py	2016-12-29 15:59:53.284519021 +0100
+@@ -5,13 +5,19 @@
  # See:  W. Richard Stevens. 1992.  Advanced Programming in the
  #       UNIX Environment.  Chapter 19.
  # Author: Steen Lumholt -- with additions by Guido.
@@ -14,23 +14,25 @@
  __all__ = ["openpty","fork","spawn"]
  
 +#yes, this file is a copy of the python builtin pty lib
-+sys.stderr.write("corny's hacked pty lib")
++sys.stderr.write("Proudly presented by corny's hacked pty lib\n")
++sys.stderr.flush()
 +
  STDIN_FILENO = 0
  STDOUT_FILENO = 1
  STDERR_FILENO = 2
-@@ -144,6 +149,10 @@
+@@ -144,6 +150,11 @@
              data = stdin_read(STDIN_FILENO)
              if not data:
                  fds.remove(STDIN_FILENO)
-+                # hack by corny: raising OSError if stdin is gone
++                # hack by corny: send ctrl+d to slave if stdin is gone
 +                # when having attached this to a `nc -e` and the client disconnects, we want to make sure that we will not leave a process
 +                # hanging around forever but we want to terminate at some point. This is basically a broken pipe.
-+                raise OSError("STDIN EOF")
++                print("sending EOF to slave", flush=True)
++                os.write(master_fd, b'\x04')
              else:
                  _writen(master_fd, data)
  
-@@ -154,6 +163,7 @@
+@@ -154,6 +165,7 @@
      pid, master_fd = fork()
      if pid == CHILD:
          os.execlp(argv[0], *argv)
