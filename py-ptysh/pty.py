@@ -11,6 +11,7 @@ from select import select
 import os
 import tty
 import sys
+import signal
 
 __all__ = ["openpty","fork","spawn"]
 
@@ -160,6 +161,7 @@ def _copy(master_fd, master_read=_read, stdin_read=_read):
                 # hanging around forever but we want to terminate at some point. This is basically a broken pipe.
                 print("sending EOF to slave", file=sys.stderr, flush=True)
                 os.write(master_fd, b'\x04')
+                return
             else:
                 _writen(master_fd, data)
 
@@ -196,4 +198,10 @@ def spawn(argv, master_read=_read, stdin_read=_read):
             tty.tcsetattr(STDIN_FILENO, tty.TCSAFLUSH, mode)
 
     os.close(master_fd)
-    return os.waitpid(pid, 0)[1]
+    wpid, exitstatus = os.waitpid(pid, os.WNOHANG)
+    if wpid == 0 and exitstatus == 0:
+        print("Child did not exit, sending SIGHUP", file=sys.stderr, flush=True)
+        os.kill(pid, signal.SIGHUP)
+        exitstatus = os.waitpid(pid, 0)[1]
+
+    return exitstatus
