@@ -139,11 +139,16 @@ def _copy(master_fd, master_read=_read, stdin_read=_read):
             standard input -> pty master    (stdin_read)"""
     fds = [master_fd, STDIN_FILENO]
     while True:
+        # The expected path to leave this infinite loop is that the
+        # child exits and its slave_fd is destroyed. In this case,
+        # master_fd will become ready in select() and reading from
+        # master_fd either raises an OSError (Input/output error) on
+        # Linux or returns EOF on BSD.
         rfds, wfds, xfds = select(fds, [], [])
         if master_fd in rfds:
             data = master_read(master_fd)
             if not data:  # Reached EOF.
-                fds.remove(master_fd)
+                return
             else:
                 os.write(STDOUT_FILENO, data)
         if STDIN_FILENO in rfds:
@@ -153,7 +158,7 @@ def _copy(master_fd, master_read=_read, stdin_read=_read):
                 # hack by corny: send ctrl+d to slave if stdin is gone
                 # when having attached this to a `nc -e` and the client disconnects, we want to make sure that we will not leave a process
                 # hanging around forever but we want to terminate at some point. This is basically a broken pipe.
-                print("sending EOF to slave", flush=True)
+                print("sending EOF to slave", file=sys.stderr, flush=True)
                 os.write(master_fd, b'\x04')
             else:
                 _writen(master_fd, data)
@@ -164,8 +169,16 @@ def spawn(argv, master_read=_read, stdin_read=_read):
         argv = (argv,)
     pid, master_fd = fork()
     if pid == CHILD:
-        os.execlp(argv[0], *argv)
-        assert False, "unreachable or exec failed"
+        try:
+            os.execlp(argv[0], *argv)
+        except:
+            # If we wanted to be really clever, we would use
+            # the same method as subprocess() to pass the error
+            # back to the parent.  For now just dump stack trace.
+            sys.excepthook(*sys.exc_info())
+        finally:
+            os._exit(1)
+            assert False, "unreachable or exec failed"
     try:
         mode = tty.tcgetattr(STDIN_FILENO)
         tty.setraw(STDIN_FILENO)
@@ -175,6 +188,10 @@ def spawn(argv, master_read=_read, stdin_read=_read):
     try:
         _copy(master_fd, master_read, stdin_read)
     except OSError:
+        # Some OSes never return an EOF on pty, just raise
+        # an error instead.
+        pass
+    finally:
         if restore:
             tty.tcsetattr(STDIN_FILENO, tty.TCSAFLUSH, mode)
 

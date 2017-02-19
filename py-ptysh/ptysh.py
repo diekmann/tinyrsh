@@ -10,5 +10,5 @@ if killsig != 0:
     print("abnormal termination")
 retcode = (ret & 0xff00) >> 8
 
-print("exited {}".format(retcode))
+print("exited {}".format(retcode), file=sys.stderr)
 sys.exit(retcode)
