@@ -45,10 +45,14 @@ static int child_func(void* args){
   if(mount(NULL, "./mnt1", "tmpfs", 0, NULL) == -1)
     errExit("tmpfsmount");
 
+  puts("make mounts private");
+  if(mount("none", "/", NULL, MS_REC|MS_PRIVATE, NULL) == -1)
+    errExit("mount private");
+
   puts("mount proc");
   if(mkdir("./mnt1/proc", 777) == -1)
     errExit("mkdir proc");
-  if(mount(0, "./mnt1/proc", "proc", 0, NULL) == -1)
+  if(mount(0, "./mnt1/proc", "proc", MS_NOSUID|MS_NODEV|MS_NOEXEC, NULL) == -1)
     errExit("procmount1");
 
   puts("cp busybox");
@@ -63,6 +67,11 @@ static int child_func(void* args){
   puts("chdir");
   if(chdir("/") == -1)
     errExit("chdir /");
+
+  // mount must be private
+  puts("unount old root");
+  if(umount2("/oldroot", MNT_DETACH) == -1)
+    errExit("umount");
 
   puts("execl busybox sh");
   execl("/busybox", "busybox", "sh", NULL);
