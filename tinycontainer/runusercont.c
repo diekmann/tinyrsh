@@ -9,6 +9,8 @@
 #include <fcntl.h>
 #include <sys/wait.h>
 #include <sched.h>
+#include <sys/stat.h>
+#include <sys/types.h>
 #include <sys/mount.h>
 
 #define STACK_SIZE (1024 * 1024)
@@ -86,13 +88,12 @@ void *child_stack;
 static void
 update_map(char *mapping, char *map_file)
 {
-    int fd, j;
+    int fd;
     size_t map_len;     /* Length of 'mapping' */
 
     /* Replace commas in mapping string with newlines */
-
     map_len = strlen(mapping);
-    for (j = 0; j < map_len; j++)
+    for (int j = 0; j < (int)map_len; j++)
         if (mapping[j] == ',')
             mapping[j] = '\n';
 
@@ -103,9 +104,11 @@ update_map(char *mapping, char *map_file)
         exit(EXIT_FAILURE);
     }
 
-    if (write(fd, mapping, map_len) != map_len) {
-        fprintf(stderr, "ERROR: write %s: %s\n", map_file,
-                strerror(errno));
+    ssize_t wres = write(fd, mapping, map_len);
+    if (wres < 0)
+        errExit("write");
+    if ((size_t)wres != map_len) {
+        fprintf(stderr, "ERROR: incomplete write %s: %s\n", map_file, strerror(errno));
         exit(EXIT_FAILURE);
     }
 
