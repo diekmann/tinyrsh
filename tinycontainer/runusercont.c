@@ -9,6 +9,7 @@
 #include <fcntl.h>
 #include <sys/wait.h>
 #include <sched.h>
+#include <sys/mount.h>
 
 #define STACK_SIZE (1024 * 1024)
 
@@ -34,10 +35,36 @@ static int child_func(void* args){
       exit(EXIT_FAILURE);
   }
 
+  //try to exec the binary from the NEW mount so we can umount the old
+  //puts("bind mount");
+  //if(mount("./mnt1", "./mnt1", NULL, MS_BIND, NULL) == -1)
+  //  errExit("bindmount1");
+  puts("tmpfs mount /");
+  if(mount(NULL, "./mnt1", "tmpfs", 0, NULL) == -1)
+    errExit("tmpfsmount");
 
-  puts("execlp busybox sh");
-  execlp("busybox", "busybox", "sh", NULL);
-  errExit("execlp");
+  puts("mount proc");
+  if(mkdir("./mnt1/proc", 777) == -1)
+    errExit("mkdir proc");
+  if(mount(0, "./mnt1/proc", "proc", 0, NULL) == -1)
+    errExit("procmount1");
+
+  puts("cp busybox");
+  system("cp busybox ./mnt1/busybox");
+
+  puts("pivot_root");
+  if(mkdir("./mnt1/oldroot", 777) == -1)
+    errExit("mkdir oldroot");
+  if(pivot_root("./mnt1", "./mnt1/oldroot") == -1)
+    errExit("pivto_root");
+
+  puts("chdir");
+  if(chdir("/") == -1)
+    errExit("chdir /");
+
+  puts("execl busybox sh");
+  execl("/busybox", "busybox", "sh", NULL);
+  errExit("exec");
 }
 
 void *child_stack;
