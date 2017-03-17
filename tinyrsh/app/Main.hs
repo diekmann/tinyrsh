@@ -1,7 +1,7 @@
 module Main where
 
 import Data.Maybe (isNothing, isJust)
-import System.IO hiding (stdin, stdout)
+import System.IO
 import Network.Socket
 import qualified System.Process as SysProc
 import qualified System.Process.Internals as SysProcInt (withProcessHandle, ProcessHandle__(..))
@@ -11,28 +11,7 @@ import qualified System.Posix.Signals as Sig
 import qualified System.Posix.IO as PIO
 import System.Posix.Types (Fd)
 
-
---TODO also add stderr
-data StdIOSet = StdIOSet SysProc.ProcessHandle -- handle to spawned command
-                         (Handle, ThreadId)    -- stdin_w and copy loop
-                         (Handle, ThreadId)    -- stdout_r and copy loop
-			 -- TODO: make lists?
-			 (MVar (Handle))  -- stdin_r attached clients
-			 (MVar (Handle))  -- stdout_r attached clients
-
-updateMVarMaybe :: MVar a -> a -> IO ()
-updateMVarMaybe mvar val = do
-    putStrLn "updateMVarMaybe"
-    can <- tryTakeMVar mvar
-    case can of Nothing -> putStrLn "cannot take MVar"
-                Just x -> putStrLn "can take MVar, old value present"
-    putMVar mvar val
-
-addHandle :: StdIOSet -> Handle -> IO ()
-addHandle (StdIOSet ph hin hout mvar_in mvar_out) hdl = do
-        putStrLn "Adding handle to MVars"
-        updateMVarMaybe mvar_in (hdl)
-        updateMVarMaybe mvar_out (hdl)
+data StdIOSet = StdIOSet SysProc.ProcessHandle Handle Handle Handle
 
 spawnCMD :: String -> IO StdIOSet
 spawnCMD cmd = do
@@ -65,14 +44,7 @@ spawnCMD cmd = do
     l <- hGetLine p_stdout_r 
     putStrLn $ show l
 
-
-    stdin_clients <- newEmptyMVar
-    stdout_clients <- newEmptyMVar
-
-    stdin_t <- forkIO (copyMVarFromHdlLoop stdin_clients p_stdin_w)
-    stdout_t <- forkIO (copyMVarToHdlLoop p_stdout_r stdout_clients)
-
-    let server_side = StdIOSet ph (p_stdin_w, stdin_t) (p_stdout_r, stdout_t) stdin_clients stdout_clients
+    let server_side = StdIOSet ph p_stdin_w p_stdout_r p_stdout_r
     return $ server_side
     where mapM2 f (a, b) = do
             a' <- f a
@@ -135,42 +107,13 @@ reapAndPrint phs = do
                                                                     SysProcInt.OpenHandle h -> return ("[" ++ show h ++ "]")
                                                                     SysProcInt.ClosedHandle h -> return "?")
 
-handleClient :: StdIOSet -> Handle -> IO ()
-handleClient child_proc hdl = do
+handleClient :: StdIOSet -> Handle -> IO (ThreadId, ThreadId)
+handleClient (StdIOSet ph stdin stdout stderr) hdl = do
     putStrLn $ "handle client"
-    --HANDLE!
-    putStrLn $ "TODO"
-    addHandle child_proc hdl
+    stdin_t <- forkIO (copyHdlLoop hdl stdin)
+    stdout_t <- forkIO (copyHdlLoop stdout hdl)
+    return (stdin_t, stdout_t)
 
-
-copyMVarToHdlLoop :: Handle -> MVar Handle -> IO ()
-copyMVarToHdlLoop hdl_from mvar_hdl_to = do
-    hdl_to <- takeMVar mvar_hdl_to
-    cont <- copyChar hdl_from hdl_to
-    case cont of Just _ -> putMVar mvar_hdl_to hdl_to
-                 Nothing -> putStrLn "copyMVarToHdlLoop no putMVar"
-    copyMVarToHdlLoop hdl_from mvar_hdl_to
-
-copyMVarFromHdlLoop :: MVar Handle -> Handle -> IO ()
-copyMVarFromHdlLoop mvar_hdl_from hdl_to = do
-    hdl_from <- takeMVar mvar_hdl_from
-    cont <- copyChar hdl_from hdl_to
-    case cont of Just _ -> putMVar mvar_hdl_from hdl_from
-                 Nothing -> putStrLn "copyMVarFromHdlLoop no putMVar"
-    copyMVarFromHdlLoop mvar_hdl_from hdl_to
-
-
-copyChar :: Handle -> Handle -> IO (Maybe Char)
-copyChar hdl_from hdl_to = do
-    hasChar <- tryGetChar hdl_from
-    case hasChar of
-        Just c -> do
-             --TODO: does putchar on hdl need synchronization with the above forkIO read thread?
-            hPutChar hdl_to c
-            hFlush hdl_to
-            return (Just c)
-        Nothing -> do putStrLn "handle closed?"
-                      return Nothing
 
 
 --CHEAP COPY from Client. Not sure about this!
