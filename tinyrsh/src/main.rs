@@ -47,9 +47,6 @@ fn debug_fdset(fdset: &FdSet) {
 }
 
 
-use std::fs::File;
-use std::os::unix::io::FromRawFd;
-
 fn read_child<T: Read>(readt: &mut T) {
     let mut buffer = [0; 10];
     let n = readt.read(&mut buffer).expect("read_child");
