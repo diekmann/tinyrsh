@@ -6,6 +6,7 @@ use std::io::{Read, Write};
 use std::os::unix::io::{RawFd, AsRawFd, IntoRawFd};
 use tinyrsh::select as select;
 use tinyrsh::select::FdSet;
+use std::process::{Command, Stdio};
 
 
 fn greet_client(mut stream: &TcpStream) {
@@ -45,13 +46,52 @@ fn debug_fdset(fdset: &FdSet) {
     }
 }
 
+
+use std::fs::File;
+use std::os::unix::io::FromRawFd;
+
+fn read_child<T: Read>(readt: &mut T) {
+    let mut buffer = [0; 10];
+    let n = readt.read(&mut buffer).expect("read_child");
+    println!("{:?} ({} bytes)", buffer, n);
+}
+
 fn main() {
     println!("Hello, world!");
+
+    let child = Command::new("../py-ptysh/ptysh.py")
+            //.arg("-a")
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .expect("failed to execute process");
+    println!("spawned child with pid {}", child.id());
+
+    let child_stdin  = child.stdin.unwrap();
+    let mut child_stdout = child.stdout.unwrap();
+    let mut child_stderr = child.stderr.unwrap();
+
+
+        // test read output!!! not linebuffered??
+        let mut buffer = [0; 10];
+        let n = child_stdout.read(&mut buffer).expect("child stdout read");
+        println!("childstdout: {:?} ({} bytes)", buffer, n);
+
+
     let listener = TcpListener::bind("127.0.0.1:6699").unwrap();
 
     let mut all_fdset = FdSet::new();
     let srv_fd = listener.as_raw_fd(); // not consumed
-    all_fdset.insert(srv_fd);
+    
+    //high fd for select() call
+    let mut high_fd = 0;
+
+    for fd in [srv_fd, child_stdout.as_raw_fd(), child_stderr.as_raw_fd()].iter() {
+        println!("inserting fd {}", fd);
+        all_fdset.insert(*fd);
+        high_fd = std::cmp::max(high_fd, *fd);
+    };
 
     let mut clients = HashMap::new(); //could also use FromRawFd
 
@@ -73,11 +113,11 @@ fn main() {
     };
 
     for stream in listener.incoming() {
-        let mut high_fd = 0;
         match stream {
             Ok(mut stream) => {
                 greet_client(&mut stream);
                 high_fd = std::cmp::max(high_fd, add_client(&mut all_fdset, &mut clients, stream));
+                println!("new high fd: {}", high_fd);
             }
             Err(e) => { /* connection failed */ }
         }
@@ -85,6 +125,7 @@ fn main() {
         loop {
             let mut fdset = all_fdset.clone();
             let res = select::select(high_fd + 1, Some(&mut fdset), None, None, None);
+            assert!(res > 0);
             println!("selected returned {}", res);
             debug_fdset(&fdset);
             
@@ -96,7 +137,13 @@ fn main() {
                     if i == srv_fd {
                         println!("need to accept new connection");
                         accept_new = true;
-                    }else{
+                    } else if i == child_stdout.as_raw_fd() {
+                        println!("child fd {} (stdout) got active", i);
+                        read_child(&mut child_stdout);
+                    } else if i == child_stderr.as_raw_fd() {
+                        println!("child fd {} (stderr) got active", i);
+                        read_child(&mut child_stderr);
+                    } else {
                         assert!(clients.contains_key(&i));
                         let cont = {
                             let ref stream = clients[&i];
