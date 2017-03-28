@@ -34,7 +34,7 @@ Patch: If STDIN seems closed, proceed to close the whole process. Assumes that `
 
 
 ### Current Working Version of tinyrsh
-In `tinyrsh` resides the current working trunk of the actual implementation.
+In `rsh-impls/hs-idiomatic2` resides the current working trunk of the actual implementation.
 
  - based on `rsh-impls/hs-idiomatic`
  - spawns the python helper to get a shell attached to a terminal
