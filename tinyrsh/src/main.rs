@@ -128,8 +128,10 @@ fn main() {
                 high_fd = std::cmp::max(high_fd, add_client(&mut all_fdset, &mut clients, stream));
                 println!("new high fd: {}", high_fd);
             }
-            Err(e) => { /* connection failed */ }
+            Err(e) => { println!("connection failed!"); }
         }
+        let stream = (); //todo remove outer for stream loop
+
         println!("selecting");
         loop {
             let mut fdset = all_fdset.clone();
@@ -148,16 +150,24 @@ fn main() {
                         accept_new = true;
                     } else if i == child_stdout.as_raw_fd() {
                         println!("child fd {} (stdout) got active", i);
-                        read_child(&mut child_stdout);
+                        //read_child(&mut child_stdout);
+                        let mut buf = [0; 10];
+                        let n = child_stdout.read(&mut buf).expect("child stdout read");
+                        println!("read child {:?} ({} bytes) `{}'", buf, n, String::from_utf8_lossy(&buf[..n]));
+                        assert!(n != 0); //child not EOF
+                        for mut remote in clients.values() {
+                            println!("forwarding to {}", remote.peer_addr().unwrap());
+                            let written = remote.write(&buf[..n]).expect("remote write");
+                            remote.flush();
+                            assert_eq!(n, written);
+                        }
                     } else if i == child_stderr.as_raw_fd() {
                         println!("child fd {} (stderr) got active", i);
                         read_child(&mut child_stderr);
                     } else {
                         assert!(clients.contains_key(&i));
                         let cont = {
-                            //let ref stream = clients[&i];
-                            let stream: &mut TcpStream= clients.get_mut(&i).unwrap();
-                            //read_client(stream)
+                            let stream: &mut TcpStream = clients.get_mut(&i).unwrap();
                             copy_to(stream, &mut child_stdin)
                         };
                         if !cont {
