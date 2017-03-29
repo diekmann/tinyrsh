@@ -19,9 +19,9 @@ fn greet_client(mut stream: &TcpStream) {
     };
 }
 
+//what the develry! mut stream as parameter??
 fn read_client(mut stream: &TcpStream) -> bool {
     let remote = stream.peer_addr().unwrap();
-
 
     let mut buffer = [0; 10];
     let cont = match stream.read(&mut buffer) {
@@ -48,9 +48,21 @@ fn debug_fdset(fdset: &FdSet) {
 
 
 fn read_child<T: Read>(readt: &mut T) {
-    let mut buffer = [0; 10];
-    let n = readt.read(&mut buffer).expect("read_child");
-    println!("{:?} ({} bytes)", buffer, n);
+    let mut buf = [0; 10];
+    let n = readt.read(&mut buf).expect("read_child");
+    println!("{:?} ({} bytes) `{}'", buf, n, String::from_utf8_lossy(&buf[..n]));
+}
+
+
+fn copy_to<T: Read, U: Write>(from: &mut T, to: &mut U) -> bool {
+    let mut buf = [0; 10];
+    let n = from.read(&mut buf).expect("copy_to read");
+    println!("copy_to read {:?} ({} bytes) `{}'", buf, n, String::from_utf8_lossy(&buf[..n]));
+    let written = to.write(&buf[..n]).expect("copy_to write");
+    to.flush();
+    assert_eq!(n, written);
+
+    n != 0
 }
 
 fn main() {
@@ -65,7 +77,7 @@ fn main() {
             .expect("failed to execute process");
     println!("spawned child with pid {}", child.id());
 
-    let child_stdin  = child.stdin.unwrap();
+    let mut child_stdin  = child.stdin.unwrap();
     let mut child_stdout = child.stdout.unwrap();
     let mut child_stderr = child.stderr.unwrap();
 
@@ -90,7 +102,7 @@ fn main() {
         high_fd = std::cmp::max(high_fd, *fd);
     };
 
-    let mut clients = HashMap::new(); //could also use FromRawFd
+    let mut clients: HashMap<RawFd, TcpStream> = HashMap::new(); //could also use FromRawFd
 
     fn add_client(all_fdset: &mut FdSet, clients: &mut HashMap<RawFd, TcpStream>, stream: TcpStream) -> RawFd {
         let stream_fd: RawFd = stream.as_raw_fd(); //not consume
@@ -143,8 +155,10 @@ fn main() {
                     } else {
                         assert!(clients.contains_key(&i));
                         let cont = {
-                            let ref stream = clients[&i];
-                            read_client(&stream) 
+                            //let ref stream = clients[&i];
+                            let stream: &mut TcpStream= clients.get_mut(&i).unwrap();
+                            //read_client(stream)
+                            copy_to(stream, &mut child_stdin)
                         };
                         if !cont {
                             del_client(&mut all_fdset, &mut clients, i);
