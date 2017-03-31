@@ -53,6 +53,20 @@ fn read_child<T: Read>(readt: &mut T) {
     println!("{:?} ({} bytes) `{}'", buf, n, String::from_utf8_lossy(&buf[..n]));
 }
 
+fn forward_to_remotes<T: Read, S>(child_out: &mut T, clients: &HashMap<S, TcpStream>) -> () 
+    where S : std::cmp::Eq, S : std::hash::Hash
+{
+    let mut buf = [0; 10];
+    let n = child_out.read(&mut buf).expect("read_child");
+    println!("{:?} ({} bytes) `{}'", buf, n, String::from_utf8_lossy(&buf[..n]));
+    assert!(n != 0); //TODO eof
+    for mut remote in clients.values(){
+        println!("forwarding to {}", remote.peer_addr().unwrap());
+        let written = remote.write(&buf[..n]).expect("remote write");
+        assert_eq!(n, written);
+    }
+}
+
 
 fn copy_to<T: Read, U: Write>(from: &mut T, to: &mut U) -> bool {
     let mut buf = [0; 10];
@@ -80,6 +94,8 @@ fn main() {
     let mut child_stdin  = child.stdin.unwrap();
     let mut child_stdout = child.stdout.unwrap();
     let mut child_stderr = child.stderr.unwrap();
+    // stderr == stdout? no, but py-ptysh copies everything to std out
+    assert!(child_stdout.as_raw_fd() != child_stderr.as_raw_fd());
 
 
         // test read output!!! not linebuffered??
@@ -129,7 +145,8 @@ fn main() {
                 println!("new high fd: {}", high_fd);
             }
             Err(e) => { /* connection failed */ }
-        }
+        };
+        let stream = (); //TODO get rid of listener iterator 
         println!("selecting");
         loop {
             let mut fdset = all_fdset.clone();
@@ -137,7 +154,7 @@ fn main() {
             assert!(res > 0);
             println!("selected returned {}", res);
             debug_fdset(&fdset);
-            
+
             let mut accept_new = false;
 
             let mut handled_fds = 0;
@@ -148,7 +165,7 @@ fn main() {
                         accept_new = true;
                     } else if i == child_stdout.as_raw_fd() {
                         println!("child fd {} (stdout) got active", i);
-                        read_child(&mut child_stdout);
+                        forward_to_remotes(&mut child_stdout, &clients);
                     } else if i == child_stderr.as_raw_fd() {
                         println!("child fd {} (stderr) got active", i);
                         read_child(&mut child_stderr);
