@@ -48,11 +48,11 @@ reapAndPrint phs = do
     mapM_ printExitCode handlesAndExitCodes
     --only keep those which have not yet exited
     return [ph | (ph, exitcode) <- handlesAndExitCodes, isNothing exitcode]
-    where printExitCode (ph, Nothing) = getPid ph >>= \s -> putStrLn $ "  "++ s ++ "  running"
+    where printExitCode (ph, Nothing) = getPid ph >>= \s -> putStrLn $ "  "++ s ++ " running"
           printExitCode (ph, (Just exitcode)) = getPid ph >>= \s -> putStrLn $ "  " ++ s ++ " exited: " ++ show exitcode
           getPid ph = SysProcInt.withProcessHandle ph (\phint -> case phint of
                                                                     SysProcInt.OpenHandle h -> return ("[" ++ show h ++ "]")
-                                                                    SysProcInt.ClosedHandle _ -> return "")
+                                                                    SysProcInt.ClosedHandle h -> return "?")
 
 handleClient :: Handle -> IO SysProc.ProcessHandle
 handleClient hdl = do

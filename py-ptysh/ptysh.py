@@ -2,6 +2,8 @@
 import sys
 import pty
 
+print("corny ptysh TEST", flush=True)
+
 ret = pty.spawn('/bin/sh')
 
 assert ret < 2**16
