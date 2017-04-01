@@ -118,55 +118,57 @@ fn main() {
         clients.remove(&stream_fd);
     };
 
-    for stream in listener.incoming() {
-        match stream {
-            Ok(mut stream) => {
-                greet_client(&mut stream);
-                high_fd = std::cmp::max(high_fd, add_client(&mut all_fdset, &mut clients, stream));
-                println!("new high fd: {}", high_fd);
-            }
-            Err(e) => { /* connection failed */ }
-        };
-        let stream = (); //TODO get rid of listener iterator 
-        println!("selecting");
-        loop {
-            let mut fdset = all_fdset.clone();
-            let res = select::select(high_fd + 1, Some(&mut fdset), None, None, None);
-            assert!(res > 0);
-            println!("selected returned {}", res);
-            debug_fdset(&fdset);
+   println!("select-looping");
+   loop {
+       let mut fdset = all_fdset.clone();
+       let res = select::select(high_fd + 1, Some(&mut fdset), None, None, None);
+       assert!(res > 0);
+       println!("selected returned {}", res);
+       debug_fdset(&fdset);
 
-            let mut accept_new = false;
+       let mut accept_new = false;
 
-            let mut handled_fds = 0;
-            for i in 0 .. high_fd + 1 {
-                if fdset.contains(i) {
-                    if i == srv_fd {
-                        println!("need to accept new connection");
-                        accept_new = true;
-                    } else if i == child_stdout.as_raw_fd() {
-                        println!("child fd {} (stdout) got active", i);
-                        forward_to_remotes(&mut child_stdout, &clients);
-                    } else if i == child_stderr.as_raw_fd() {
-                        println!("child fd {} (stderr) got active", i);
-                        read_child(&mut child_stderr);
-                    } else {
-                        assert!(clients.contains_key(&i));
-                        let cont = {
-                            //let ref stream = clients[&i];
-                            let stream: &mut TcpStream= clients.get_mut(&i).unwrap();
-                            //read_client(stream)
-                            copy_to(stream, &mut child_stdin)
-                        };
-                        if !cont {
-                            del_client(&mut all_fdset, &mut clients, i);
-                        };
-                    }
-                    handled_fds += 1;
-                }
-            }
-            assert_eq!(handled_fds, res);
-            if accept_new {break}
-        }
+       let mut handled_fds = 0;
+       for i in 0 .. high_fd + 1 {
+           if fdset.contains(i) {
+               if i == srv_fd {
+                   println!("need to accept new connection");
+                   accept_new = true;
+                   //TODO move code?
+               } else if i == child_stdout.as_raw_fd() {
+                   println!("child fd {} (stdout) got active", i);
+                   forward_to_remotes(&mut child_stdout, &clients);
+               } else if i == child_stderr.as_raw_fd() {
+                   println!("child fd {} (stderr) got active", i);
+                   read_child(&mut child_stderr);
+               } else {
+                   assert!(clients.contains_key(&i));
+                   let cont = {
+                       //let ref stream = clients[&i];
+                       let stream: &mut TcpStream= clients.get_mut(&i).unwrap();
+                       //read_client(stream)
+                       copy_to(stream, &mut child_stdin)
+                   };
+                   if !cont {
+                       del_client(&mut all_fdset, &mut clients, i);
+                   };
+               }
+               handled_fds += 1;
+           }
+       }
+       assert_eq!(handled_fds, res);
+
+       //accept new connection
+       if accept_new {
+           match listener.accept() {
+               Err(e) => println!("couldn't get client: {:?}", e),
+               Ok((mut stream, addr)) => {
+                   println!("new client: {:?}", addr);
+                   greet_client(&mut stream);
+                   high_fd = std::cmp::max(high_fd, add_client(&mut all_fdset, &mut clients, stream));
+                   println!("new high fd: {}", high_fd);
+               }
+           }
+       }
     }
 }
