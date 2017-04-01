@@ -13,7 +13,7 @@ fn greet_client(mut stream: &TcpStream) {
     let remote = stream.peer_addr().unwrap();
     println!("connected: {}", remote);
 
-    match stream.write(b"hello") {
+    match stream.write(b"hello\n") {
         Err(e) => println!("{}", e),
         Ok(n) => println!("wrote {} bytes", n),
     };
@@ -34,12 +34,12 @@ fn read_child<T: Read>(readt: &mut T) {
     println!("{:?} ({} bytes) `{}'", buf, n, String::from_utf8_lossy(&buf[..n]));
 }
 
-fn forward_to_remotes<T: Read, S>(child_out: &mut T, clients: &HashMap<S, TcpStream>) -> () 
+fn forward_to_remotes<T: Read, S>(child_out: &mut T, clients: &HashMap<S, TcpStream>) -> bool 
     where S : std::cmp::Eq, S : std::hash::Hash
 {
     let mut buf = [0; 10];
     let n = child_out.read(&mut buf).expect("read_child");
-    assert!(n != 0); //TODO eof
+    let child_eof = (n == 0);
     if clients.is_empty() {
         println!("Warning: child output but no remote connected");
         println!("{:?} ({} bytes) `{}'", buf, n, String::from_utf8_lossy(&buf[..n]));
@@ -49,6 +49,7 @@ fn forward_to_remotes<T: Read, S>(child_out: &mut T, clients: &HashMap<S, TcpStr
         let written = remote.write(&buf[..n]).expect("remote write");
         assert_eq!(n, written);
     }
+    child_eof
 }
 
 
@@ -63,16 +64,21 @@ fn copy_to<T: Read, U: Write>(from: &mut T, to: &mut U) -> bool {
     n != 0
 }
 
-fn main() {
-    println!("Hello, world!");
-
-    let child = Command::new("../py-ptysh/ptysh.py")
-            //.arg("-a")
+fn spawn_child(cmd: &str) -> std::process::Child {
+    //TODO, if I want to respawn the child, I either need to reuse the pipes or always get
+    //everything out of the child struct
+    Command::new(cmd)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()
-            .expect("failed to execute process");
+            .expect("failed to execute process")
+}
+
+fn main() {
+    println!("Hello, world!");
+
+    let mut child = spawn_child("../py-ptysh/ptysh.py");
     println!("spawned child with pid {}", child.id());
 
     let mut child_stdin  = child.stdin.unwrap();
@@ -137,7 +143,13 @@ fn main() {
                    //TODO move code?
                } else if i == child_stdout.as_raw_fd() {
                    println!("child fd {} (stdout) got active", i);
-                   forward_to_remotes(&mut child_stdout, &clients);
+                   let child_eof = forward_to_remotes(&mut child_stdout, &clients);
+                   if child_eof {
+                       println!("!!!!!!! child exited. pipe will break now");
+                       //println!("exit code: {}", child.wait().expect("child unexpected state"));
+                       //ahh, ownership!
+                   }
+                   assert!(!child_eof);
                } else if i == child_stderr.as_raw_fd() {
                    println!("child fd {} (stderr) got active", i);
                    read_child(&mut child_stderr);
