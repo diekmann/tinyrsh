@@ -3,7 +3,7 @@ extern crate tinyrsh;
 use std::collections::HashMap;
 use std::net::{TcpListener, TcpStream};
 use std::io::{Read, Write};
-use std::os::unix::io::{RawFd, AsRawFd, IntoRawFd};
+use std::os::unix::io::{RawFd, AsRawFd};
 use tinyrsh::select as select;
 use tinyrsh::select::FdSet;
 use std::process::{Command, Stdio};
@@ -19,24 +19,6 @@ fn greet_client(mut stream: &TcpStream) {
     };
 }
 
-//what the develry! mut stream as parameter??
-fn read_client(mut stream: &TcpStream) -> bool {
-    let remote = stream.peer_addr().unwrap();
-
-    let mut buffer = [0; 10];
-    let cont = match stream.read(&mut buffer) {
-        Err(e) => {
-                println!("{}", e);
-                false
-            },
-        Ok(n) => {
-                println!("{}: {:?} ({} bytes)", remote, buffer, n);
-                n != 0
-            },
-    };
-    cont
-}
-
 fn debug_fdset(fdset: &FdSet) {
     let maxfds = select::FD_SETSIZE;
     for i in 0 .. maxfds {
@@ -45,7 +27,6 @@ fn debug_fdset(fdset: &FdSet) {
         }
     }
 }
-
 
 fn read_child<T: Read>(readt: &mut T) {
     let mut buf = [0; 10];
@@ -58,10 +39,13 @@ fn forward_to_remotes<T: Read, S>(child_out: &mut T, clients: &HashMap<S, TcpStr
 {
     let mut buf = [0; 10];
     let n = child_out.read(&mut buf).expect("read_child");
-    println!("{:?} ({} bytes) `{}'", buf, n, String::from_utf8_lossy(&buf[..n]));
     assert!(n != 0); //TODO eof
+    if clients.is_empty() {
+        println!("Warning: child output but no remote connected");
+        println!("{:?} ({} bytes) `{}'", buf, n, String::from_utf8_lossy(&buf[..n]));
+    }
     for mut remote in clients.values(){
-        println!("forwarding to {}", remote.peer_addr().unwrap());
+        //println!("forwarding to {}", remote.peer_addr().unwrap());
         let written = remote.write(&buf[..n]).expect("remote write");
         assert_eq!(n, written);
     }
@@ -71,7 +55,7 @@ fn forward_to_remotes<T: Read, S>(child_out: &mut T, clients: &HashMap<S, TcpStr
 fn copy_to<T: Read, U: Write>(from: &mut T, to: &mut U) -> bool {
     let mut buf = [0; 10];
     let n = from.read(&mut buf).expect("copy_to read");
-    println!("copy_to read {:?} ({} bytes) `{}'", buf, n, String::from_utf8_lossy(&buf[..n]));
+    //println!("copy_to read {:?} ({} bytes) `{}'", buf, n, String::from_utf8_lossy(&buf[..n]));
     let written = to.write(&buf[..n]).expect("copy_to write");
     to.flush();
     assert_eq!(n, written);
@@ -98,10 +82,7 @@ fn main() {
     assert!(child_stdout.as_raw_fd() != child_stderr.as_raw_fd());
 
 
-        // test read output!!! not linebuffered??
-        let mut buffer = [0; 10];
-        let n = child_stdout.read(&mut buffer).expect("child stdout read");
-        println!("childstdout: {:?} ({} bytes)", buffer, n);
+    // TODO linebuffered? how is child output buffered at all?
 
 
     let listener = TcpListener::bind("127.0.0.1:6699").unwrap();
