@@ -64,28 +64,62 @@ fn copy_to<T: Read, U: Write>(from: &mut T, to: &mut U) -> bool {
     n != 0
 }
 
-fn spawn_child(cmd: &str) -> std::process::Child {
-    //TODO, if I want to respawn the child, I either need to reuse the pipes or always get
-    //everything out of the child struct
-    Command::new(cmd)
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
-            .expect("failed to execute process")
+struct PersistentChild {
+    child : std::process::Child,
 }
+
+impl PersistentChild {
+    fn new(cmd: &str) -> Self {
+        let child_proc = Command::new(cmd)
+                .stdin(Stdio::piped())
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped())
+                .spawn()
+                .expect("failed to execute process");
+
+        //TODO, if I want to reuse the pipes, I need to keep them open and need to write my custom
+        //child spawner -_-
+
+        println!("spawned child with pid {}", child_proc.id());
+        PersistentChild{ child: child_proc }
+    }
+
+    fn stdin_as_mut(&mut self) -> &mut std::process::ChildStdin {
+        self.child.stdin.as_mut().unwrap()
+    }
+
+    fn stdout_as_mut(&mut self) -> &mut std::process::ChildStdout {
+        self.child.stdout.as_mut().unwrap()
+    }
+
+    fn stderr_as_mut(&mut self) -> &mut std::process::ChildStderr {
+        self.child.stderr.as_mut().unwrap()
+    }
+
+
+    fn _unwrap_as_raw_fd<T: AsRawFd>(x: &Option<T>) -> RawFd {
+        assert!(x.is_some());
+        x.as_ref().unwrap().as_raw_fd()
+    }
+
+    fn is_stdin(&self, i: RawFd) -> bool {
+        Self::_unwrap_as_raw_fd(&self.child.stdin) == i
+    }
+
+    fn is_stdout(&self, i: RawFd) -> bool {
+        Self::_unwrap_as_raw_fd(&self.child.stdout) == i
+    }
+
+    fn is_stderr(&self, i: RawFd) -> bool {
+        Self::_unwrap_as_raw_fd(&self.child.stderr) == i
+    }
+}
+
 
 fn main() {
     println!("Hello, world!");
 
-    let mut child = spawn_child("../py-ptysh/ptysh.py");
-    println!("spawned child with pid {}", child.id());
-
-    let mut child_stdin  = child.stdin.unwrap();
-    let mut child_stdout = child.stdout.unwrap();
-    let mut child_stderr = child.stderr.unwrap();
-    // stderr == stdout? no, but py-ptysh copies everything to std out
-    assert!(child_stdout.as_raw_fd() != child_stderr.as_raw_fd());
+    let mut child = PersistentChild::new("../py-ptysh/ptysh.py");
 
 
     // TODO linebuffered? how is child output buffered at all?
@@ -99,7 +133,7 @@ fn main() {
     //high fd for select() call
     let mut high_fd = 0;
 
-    for fd in [srv_fd, child_stdout.as_raw_fd(), child_stderr.as_raw_fd()].iter() {
+    for fd in [srv_fd, child.child.stdout.as_ref().unwrap().as_raw_fd(), child.child.stderr.as_ref().unwrap().as_raw_fd()].iter() {
         println!("inserting fd {}", fd);
         all_fdset.insert(*fd);
         high_fd = std::cmp::max(high_fd, *fd);
@@ -141,25 +175,25 @@ fn main() {
                    println!("need to accept new connection");
                    accept_new = true;
                    //TODO move code?
-               } else if i == child_stdout.as_raw_fd() {
+               } else if child.is_stdout(i) {
                    println!("child fd {} (stdout) got active", i);
-                   let child_eof = forward_to_remotes(&mut child_stdout, &clients);
+                   let child_eof = forward_to_remotes(child.stdout_as_mut(), &clients);
                    if child_eof {
                        println!("!!!!!!! child exited. pipe will break now");
                        //println!("exit code: {}", child.wait().expect("child unexpected state"));
                        //ahh, ownership!
                    }
                    assert!(!child_eof);
-               } else if i == child_stderr.as_raw_fd() {
+               } else if child.is_stderr(i) {
                    println!("child fd {} (stderr) got active", i);
-                   read_child(&mut child_stderr);
+                   read_child(child.stderr_as_mut());
                } else {
                    assert!(clients.contains_key(&i));
                    let cont = {
                        //let ref stream = clients[&i];
                        let stream: &mut TcpStream= clients.get_mut(&i).unwrap();
                        //read_client(stream)
-                       copy_to(stream, &mut child_stdin)
+                       copy_to(stream, child.stdin_as_mut())
                    };
                    if !cont {
                        del_client(&mut all_fdset, &mut clients, i);
