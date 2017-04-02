@@ -63,7 +63,17 @@ impl FdSet {
                 active_fds.push(format!("{}", i));
             }
         }
-        format!("FdSet [{}]", active_fds.join(", "))
+        format!("FdSet [{}] (maxfd: {})", active_fds.join(", "), self.compute_max_fd())
+    }
+
+    fn compute_max_fd(&self) -> c_int {
+        let mut maxfd = 0;
+        for i in 0 .. FD_SETSIZE {
+            if self.contains(i) {
+                maxfd = i;
+            }
+        }
+        maxfd
     }
 }
 

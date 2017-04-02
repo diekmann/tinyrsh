@@ -6,7 +6,7 @@ use std::io::{Read, Write};
 use std::os::unix::io::{RawFd, AsRawFd};
 use tinyrsh::select as select;
 use tinyrsh::select::FdSet;
-use std::process::{Command, Stdio};
+use tinyrsh::child::PersistentChild;
 
 
 fn greet_client(mut stream: &TcpStream) {
@@ -55,56 +55,6 @@ fn copy_to<T: Read, U: Write>(from: &mut T, to: &mut U) -> bool {
     n != 0
 }
 
-struct PersistentChild {
-    child : std::process::Child,
-}
-
-impl PersistentChild {
-    fn new(cmd: &str) -> Self {
-        let child_proc = Command::new(cmd)
-                .stdin(Stdio::piped())
-                .stdout(Stdio::piped())
-                .stderr(Stdio::piped())
-                .spawn()
-                .expect("failed to execute process");
-
-        //TODO, if I want to reuse the pipes, I need to keep them open and need to write my custom
-        //child spawner -_-
-
-        println!("spawned child with pid {}", child_proc.id());
-        PersistentChild{ child: child_proc }
-    }
-
-    fn stdin_as_mut(&mut self) -> &mut std::process::ChildStdin {
-        self.child.stdin.as_mut().unwrap()
-    }
-
-    fn stdout_as_mut(&mut self) -> &mut std::process::ChildStdout {
-        self.child.stdout.as_mut().unwrap()
-    }
-
-    fn stderr_as_mut(&mut self) -> &mut std::process::ChildStderr {
-        self.child.stderr.as_mut().unwrap()
-    }
-
-
-    fn _unwrap_as_raw_fd<T: AsRawFd>(x: &Option<T>) -> RawFd {
-        assert!(x.is_some());
-        x.as_ref().unwrap().as_raw_fd()
-    }
-
-    fn is_stdin(&self, i: RawFd) -> bool {
-        Self::_unwrap_as_raw_fd(&self.child.stdin) == i
-    }
-
-    fn is_stdout(&self, i: RawFd) -> bool {
-        Self::_unwrap_as_raw_fd(&self.child.stdout) == i
-    }
-
-    fn is_stderr(&self, i: RawFd) -> bool {
-        Self::_unwrap_as_raw_fd(&self.child.stderr) == i
-    }
-}
 
 
 fn main() {
