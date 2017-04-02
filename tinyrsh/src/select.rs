@@ -55,6 +55,16 @@ impl FdSet {
             *bits = 0
         }
     }
+
+    pub fn debug(&self) -> String {
+        let mut active_fds = vec![];
+        for i in 0 .. FD_SETSIZE {
+            if self.contains(i) {
+                active_fds.push(format!("{}", i));
+            }
+        }
+        format!("FdSet [{}]", active_fds.join(", "))
+    }
 }
 
 mod ffi {

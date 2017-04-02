@@ -19,15 +19,6 @@ fn greet_client(mut stream: &TcpStream) {
     };
 }
 
-fn debug_fdset(fdset: &FdSet) {
-    let maxfds = select::FD_SETSIZE;
-    for i in 0 .. maxfds {
-        if fdset.contains(i) {
-            println!("contains {}", i);
-        }
-    }
-}
-
 fn read_child<T: Read>(readt: &mut T) {
     let mut buf = [0; 10];
     let n = readt.read(&mut buf).expect("read_child");
@@ -164,7 +155,7 @@ fn main() {
        let res = select::select(high_fd + 1, Some(&mut fdset), None, None, None);
        assert!(res > 0);
        println!("selected returned {}", res);
-       debug_fdset(&fdset);
+       println!("fdset debug: {}", fdset.debug());
 
        let mut accept_new = false;
 
@@ -183,7 +174,7 @@ fn main() {
                        //println!("exit code: {}", child.wait().expect("child unexpected state"));
                        //ahh, ownership!
                    }
-                   assert!(!child_eof);
+                   assert!(!child_eof, "child exited, unhandled!");
                } else if child.is_stderr(i) {
                    println!("child fd {} (stderr) got active", i);
                    read_child(child.stderr_as_mut());
