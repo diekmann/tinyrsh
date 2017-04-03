@@ -71,13 +71,9 @@ fn main() {
     let mut all_fdset = FdSet::new();
     let srv_fd = listener.as_raw_fd(); // not consumed
     
-    //high fd for select() call
-    let mut high_fd = 0;
-
     for fd in [srv_fd, child.child.stdout.as_ref().unwrap().as_raw_fd(), child.child.stderr.as_ref().unwrap().as_raw_fd()].iter() {
         println!("inserting fd {}", fd);
         all_fdset.insert(*fd);
-        high_fd = std::cmp::max(high_fd, *fd);
     };
 
     let mut clients: HashMap<RawFd, TcpStream> = HashMap::new(); //could also use FromRawFd
@@ -101,21 +97,15 @@ fn main() {
 
    println!("select-looping");
    loop {
-       //println!("all_fdset debug: {}", all_fdset.debug());
-       //let mut fdset = all_fdset.clone();
-       assert!(all_fdset.high_fd <= high_fd);
-       //assert_eq!(high_fd, fdset.high_fd);
        let (num_active, fdset) = all_fdset.readfds_select();
-       assert!(high_fd >= fdset.high_fd);
        assert!(num_active > 0);
        println!("selected returned {}", num_active);
-        //TODO assertion fails because select, ...
        println!("fdset debug: {}", fdset.debug());
 
        let mut accept_new = false;
 
        let mut handled_fds = 0;
-       for i in 0 .. high_fd + 1 {
+       for i in 0 .. fdset.high_fd + 1 {
            if fdset.contains(i) {
                if i == srv_fd {
                    println!("need to accept new connection");
@@ -157,8 +147,7 @@ fn main() {
                Ok((mut stream, addr)) => {
                    println!("new client: {:?}", addr);
                    greet_client(&mut stream);
-                   high_fd = std::cmp::max(high_fd, add_client(&mut all_fdset, &mut clients, stream));
-                   println!("new high fd: {}", high_fd);
+                   add_client(&mut all_fdset, &mut clients, stream);
                }
            }
        }
