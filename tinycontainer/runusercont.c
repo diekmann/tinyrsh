@@ -9,12 +9,19 @@
 #include <fcntl.h>
 #include <sys/wait.h>
 #include <sched.h>
+#include <sys/stat.h>
+#include <sys/types.h>
 #include <sys/mount.h>
 
 #define STACK_SIZE (1024 * 1024)
 
 #define errExit(msg)    do { perror(msg); exit(EXIT_FAILURE); \
                                } while (0)
+
+#define doErrExit(cmd)  do { puts(#cmd); \
+                             if((cmd) == -1){errExit(#cmd);} \
+                               } while (0)
+
 
 int pipe_fd[2];  /* Pipe used to synchronize parent and child */
 
@@ -39,28 +46,26 @@ static int child_func(void* args){
   //puts("bind mount");
   //if(mount("./mnt1", "./mnt1", NULL, MS_BIND, NULL) == -1)
   //  errExit("bindmount1");
-  puts("tmpfs mount /");
-  if(mount(NULL, "./mnt1", "tmpfs", 0, NULL) == -1)
-    errExit("tmpfsmount");
+  doErrExit(mount(NULL, "./mnt1", "tmpfs", 0, NULL));
 
-  puts("mount proc");
-  if(mkdir("./mnt1/proc", 777) == -1)
-    errExit("mkdir proc");
-  if(mount(0, "./mnt1/proc", "proc", 0, NULL) == -1)
-    errExit("procmount1");
+  doErrExit(mount("none", "/", NULL, MS_REC|MS_PRIVATE, NULL));
 
-  puts("cp busybox");
+  puts("mounting proc");
+  doErrExit(mkdir("./mnt1/proc", 777));
+  doErrExit(mount(0, "./mnt1/proc", "proc", MS_NOSUID|MS_NODEV|MS_NOEXEC, NULL));
+
+  puts("cp busybox yolo");
   system("cp busybox ./mnt1/busybox");
 
   puts("pivot_root");
-  if(mkdir("./mnt1/oldroot", 777) == -1)
-    errExit("mkdir oldroot");
-  if(pivot_root("./mnt1", "./mnt1/oldroot") == -1)
-    errExit("pivto_root");
+  doErrExit(mkdir("./mnt1/oldroot", 777));
+  doErrExit(pivot_root("./mnt1", "./mnt1/oldroot"));
 
-  puts("chdir");
-  if(chdir("/") == -1)
-    errExit("chdir /");
+  doErrExit(chdir("/"));
+
+  // mount must be private
+  puts("unount old root");
+  doErrExit(umount2("/oldroot", MNT_DETACH));
 
   puts("execl busybox sh");
   execl("/busybox", "busybox", "sh", NULL);
@@ -86,13 +91,12 @@ void *child_stack;
 static void
 update_map(char *mapping, char *map_file)
 {
-    int fd, j;
+    int fd;
     size_t map_len;     /* Length of 'mapping' */
 
     /* Replace commas in mapping string with newlines */
-
     map_len = strlen(mapping);
-    for (j = 0; j < map_len; j++)
+    for (int j = 0; j < (int)map_len; j++)
         if (mapping[j] == ',')
             mapping[j] = '\n';
 
@@ -103,9 +107,11 @@ update_map(char *mapping, char *map_file)
         exit(EXIT_FAILURE);
     }
 
-    if (write(fd, mapping, map_len) != map_len) {
-        fprintf(stderr, "ERROR: write %s: %s\n", map_file,
-                strerror(errno));
+    ssize_t wres = write(fd, mapping, map_len);
+    if (wres < 0)
+        errExit("write");
+    if ((size_t)wres != map_len) {
+        fprintf(stderr, "ERROR: incomplete write %s: %s\n", map_file, strerror(errno));
         exit(EXIT_FAILURE);
     }
 
