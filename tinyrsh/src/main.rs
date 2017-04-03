@@ -5,7 +5,7 @@ use std::net::{TcpListener, TcpStream};
 use std::io::{Read, Write};
 use std::os::unix::io::{RawFd, AsRawFd};
 use tinyrsh::select as select;
-use tinyrsh::select::FdSet;
+use tinyrsh::select::RawFdSet;
 use tinyrsh::child::PersistentChild;
 
 
@@ -68,7 +68,7 @@ fn main() {
 
     let listener = TcpListener::bind("127.0.0.1:6699").unwrap();
 
-    let mut all_fdset = FdSet::new();
+    let mut all_fdset = RawFdSet::new();
     let srv_fd = listener.as_raw_fd(); // not consumed
     
     //high fd for select() call
@@ -82,14 +82,14 @@ fn main() {
 
     let mut clients: HashMap<RawFd, TcpStream> = HashMap::new(); //could also use FromRawFd
 
-    fn add_client(all_fdset: &mut FdSet, clients: &mut HashMap<RawFd, TcpStream>, stream: TcpStream) -> RawFd {
+    fn add_client(all_fdset: &mut RawFdSet, clients: &mut HashMap<RawFd, TcpStream>, stream: TcpStream) -> RawFd {
         let stream_fd: RawFd = stream.as_raw_fd(); //not consume
         println!("inserted fd {}", stream_fd);
         clients.insert(stream_fd, stream);
         all_fdset.insert(stream_fd);
         stream_fd
     };
-    fn del_client(all_fdset: &mut FdSet, clients: &mut HashMap<RawFd, TcpStream>, stream_fd: RawFd) {
+    fn del_client(all_fdset: &mut RawFdSet, clients: &mut HashMap<RawFd, TcpStream>, stream_fd: RawFd) {
         assert!(clients.contains_key(&stream_fd));
         //let stream = clients.get(&stream_fd);
         println!("removing fd {}", stream_fd);

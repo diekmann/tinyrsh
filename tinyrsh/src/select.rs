@@ -10,7 +10,7 @@ pub const FD_SETSIZE: RawFd = 1024;
 #[cfg(any(target_os = "macos", target_os = "ios"))]
 #[repr(C)]
 #[derive(Clone)]
-pub struct FdSet {
+pub struct RawFdSet {
     bits: [i32; FD_SETSIZE as usize / 32]
 }
 
@@ -20,16 +20,16 @@ const BITS: usize = 32;
 #[cfg(not(any(target_os = "macos", target_os = "ios")))]
 #[repr(C)]
 #[derive(Clone)]
-pub struct FdSet {
+pub struct RawFdSet {
     bits: [u64; FD_SETSIZE as usize / 64]
 }
 
 #[cfg(not(any(target_os = "macos", target_os = "ios")))]
 const BITS: usize = 64;
 
-impl FdSet {
-    pub fn new() -> FdSet {
-        FdSet {
+impl RawFdSet {
+    pub fn new() -> RawFdSet {
+        RawFdSet {
             bits: [0; FD_SETSIZE as usize / BITS]
         }
     }
@@ -63,7 +63,7 @@ impl FdSet {
                 active_fds.push(format!("{}", i));
             }
         }
-        format!("FdSet [{}] (maxfd: {})", active_fds.join(", "), self.compute_max_fd())
+        format!("RawFdSet [{}] (maxfd: {})", active_fds.join(", "), self.compute_max_fd())
     }
 
     fn compute_max_fd(&self) -> c_int {
@@ -79,25 +79,25 @@ impl FdSet {
 
 mod ffi {
     use libc::{c_int, timeval};
-    use super::FdSet;
+    use super::RawFdSet;
 
     extern {
         pub fn select(nfds: c_int,
-                      readfds: *mut FdSet,
-                      writefds: *mut FdSet,
-                      errorfds: *mut FdSet,
+                      readfds: *mut RawFdSet,
+                      writefds: *mut RawFdSet,
+                      errorfds: *mut RawFdSet,
                       timeout: *mut timeval) -> c_int;
     }
 }
 
 pub fn select(nfds: c_int,
-              readfds: Option<&mut FdSet>,
-              writefds: Option<&mut FdSet>,
-              errorfds: Option<&mut FdSet>,
+              readfds: Option<&mut RawFdSet>,
+              writefds: Option<&mut RawFdSet>,
+              errorfds: Option<&mut RawFdSet>,
               timeout: Option<&mut TimeVal>) -> c_int {
-    let readfds = readfds.map(|set| set as *mut FdSet).unwrap_or(null_mut());
-    let writefds = writefds.map(|set| set as *mut FdSet).unwrap_or(null_mut());
-    let errorfds = errorfds.map(|set| set as *mut FdSet).unwrap_or(null_mut());
+    let readfds = readfds.map(|set| set as *mut RawFdSet).unwrap_or(null_mut());
+    let writefds = writefds.map(|set| set as *mut RawFdSet).unwrap_or(null_mut());
+    let errorfds = errorfds.map(|set| set as *mut RawFdSet).unwrap_or(null_mut());
     let timeout = timeout.map(|tv| tv as *mut TimeVal as *mut timeval)
                          .unwrap_or(null_mut());
 
