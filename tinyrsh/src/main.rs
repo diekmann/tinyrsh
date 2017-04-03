@@ -102,13 +102,13 @@ fn main() {
    println!("select-looping");
    loop {
        //println!("all_fdset debug: {}", all_fdset.debug());
-       let mut fdset = all_fdset.clone();
-       assert_eq!(high_fd, all_fdset.high_fd);
-       assert_eq!(high_fd, fdset.high_fd);
-       let res = select::select(high_fd + 1, Some(&mut fdset.raw_fd_set), None, None, None);
+       //let mut fdset = all_fdset.clone();
+       assert!(all_fdset.high_fd <= high_fd);
+       //assert_eq!(high_fd, fdset.high_fd);
+       let (num_active, fdset) = all_fdset.readfds_select();
        assert!(high_fd >= fdset.high_fd);
-       assert!(res > 0);
-       println!("selected returned {}", res);
+       assert!(num_active > 0);
+       println!("selected returned {}", num_active);
         //TODO assertion fails because select, ...
        println!("fdset debug: {}", fdset.debug());
 
@@ -148,7 +148,7 @@ fn main() {
                handled_fds += 1;
            }
        }
-       assert_eq!(handled_fds, res);
+       assert_eq!(handled_fds, num_active);
 
        //accept new connection
        if accept_new {

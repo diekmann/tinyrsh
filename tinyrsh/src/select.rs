@@ -148,6 +148,14 @@ impl FdSet {
         //assert!(maxfd <= self.high_fd);
         format!("{} (highfd: {})", self.raw_fd_set.debug(), self.high_fd)
     }
+
+    pub fn readfds_select(&self) -> (c_int, FdSet) {
+        let mut rfds = self.raw_fd_set.clone();
+        let numactive = select(self.high_fd + 1, Some(&mut rfds), None, None, None);
+        let maxfd = rfds.compute_max_fd();
+        assert!(maxfd <= self.high_fd);
+        (numactive, FdSet{ raw_fd_set: rfds, high_fd: maxfd })
+    }
 }
 
 
