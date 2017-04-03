@@ -22,7 +22,7 @@ fn greet_client(mut stream: &TcpStream) {
 fn read_child<T: Read>(readt: &mut T) {
     let mut buf = [0; 10];
     let n = readt.read(&mut buf).expect("read_child");
-    println!("{:?} ({} bytes) `{}'", buf, n, String::from_utf8_lossy(&buf[..n]));
+    println!("({} bytes) `{}'", n, String::from_utf8_lossy(&buf[..n]));
 }
 
 fn forward_to_remotes<T: Read, S>(child_out: &mut T, clients: &HashMap<S, TcpStream>) -> bool 
@@ -102,15 +102,21 @@ fn main() {
        println!("selected returned {}", num_active);
        println!("fdset debug: {}", fdset.debug());
 
-       let mut accept_new = false;
-
        let mut handled_fds = 0;
        for i in 0 .. fdset.high_fd + 1 {
            if fdset.contains(i) {
                if i == srv_fd {
                    println!("need to accept new connection");
-                   accept_new = true;
                    //TODO move code?
+                   //accept new connection
+                   match listener.accept() {
+                       Err(e) => println!("couldn't get client: {:?}", e),
+                       Ok((mut stream, addr)) => {
+                           println!("new client: {:?}", addr);
+                           greet_client(&mut stream);
+                           add_client(&mut all_fdset, &mut clients, stream);
+                       }
+                   }
                } else if child.is_stdout(i) {
                    println!("child fd {} (stdout) got active", i);
                    let child_eof = forward_to_remotes(child.stdout_as_mut(), &clients);
@@ -139,17 +145,5 @@ fn main() {
            }
        }
        assert_eq!(handled_fds, num_active);
-
-       //accept new connection
-       if accept_new {
-           match listener.accept() {
-               Err(e) => println!("couldn't get client: {:?}", e),
-               Ok((mut stream, addr)) => {
-                   println!("new client: {:?}", addr);
-                   greet_client(&mut stream);
-                   add_client(&mut all_fdset, &mut clients, stream);
-               }
-           }
-       }
     }
 }

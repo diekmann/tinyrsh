@@ -144,8 +144,6 @@ impl FdSet {
     pub fn debug(&self) -> String {
         let maxfd = self.raw_fd_set.compute_max_fd();
         assert_eq!(maxfd, self.high_fd);
-        //TODO after reset, make _eq again!!
-        //assert!(maxfd <= self.high_fd);
         format!("{} (highfd: {})", self.raw_fd_set.debug(), self.high_fd)
     }
 
