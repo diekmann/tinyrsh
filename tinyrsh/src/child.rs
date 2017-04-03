@@ -17,6 +17,9 @@ impl PersistentChild {
 
         //TODO, if I want to reuse the pipes, I need to keep them open and need to write my custom
         //child spawner -_-
+        // If I keep both ends of the pipes open in the main process, I will not be able to read an
+        // EOF if the child closes its end of the pipe. Probabaly I stick to the std library and
+        //  create new pipes when a child needs to be respawned
 
         println!("spawned child with pid {}", child_proc.id());
         PersistentChild{ child: child_proc }
