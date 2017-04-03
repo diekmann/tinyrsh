@@ -109,6 +109,29 @@ pub fn select(nfds: c_int,
 }
 
 
+//TODO this is a stupid iterator
+pub struct FdSetIter {
+    raw_fd_set: RawFdSet,
+    high_fd: c_int, // iter to +1
+    next_fd: c_int,
+}
+
+impl Iterator for FdSetIter {
+    type Item = RawFd;
+
+    fn next(&mut self) -> Option<RawFd> {
+        while self.next_fd < self.high_fd + 1 {
+            let cur_fd = self.next_fd;
+            self.next_fd += 1;
+            if self.raw_fd_set.contains(cur_fd){
+                return Some(cur_fd as RawFd);
+            }
+        }
+        None
+    }
+}
+
+
 #[derive(Clone)]
 pub struct FdSet {
     pub raw_fd_set: RawFdSet,
@@ -147,12 +170,18 @@ impl FdSet {
         format!("{} (highfd: {})", self.raw_fd_set.debug(), self.high_fd)
     }
 
-    pub fn readfds_select(&self) -> (c_int, FdSet) {
-        let mut rfds = self.raw_fd_set.clone();
-        let numactive = select(self.high_fd + 1, Some(&mut rfds), None, None, None);
-        let maxfd = rfds.compute_max_fd();
+    pub fn readfds_select(&self) -> FdSetIter {
+        let mut ret = FdSetIter {
+            raw_fd_set: self.raw_fd_set.clone(),
+            high_fd: self.high_fd,
+            next_fd: 0,
+        };
+        let numactive = select(self.high_fd + 1, Some(&mut ret.raw_fd_set), None, None, None);
+        let maxfd = ret.raw_fd_set.compute_max_fd();
         assert!(maxfd <= self.high_fd);
-        (numactive, FdSet{ raw_fd_set: rfds, high_fd: maxfd })
+        println!("readfds_select {} active: {}", numactive, ret.raw_fd_set.debug());
+        //(numactive, FdSet{ raw_fd_set: rfds, high_fd: maxfd })
+        ret
     }
 }
 

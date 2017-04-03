@@ -97,15 +97,10 @@ fn main() {
 
    println!("select-looping");
    loop {
-       let (num_active, fdset) = all_fdset.readfds_select();
-       assert!(num_active > 0);
-       println!("selected returned {}", num_active);
-       println!("fdset debug: {}", fdset.debug());
+       let readfds = all_fdset.readfds_select();
 
-       let mut handled_fds = 0;
-       for i in 0 .. fdset.high_fd + 1 {
-           if fdset.contains(i) {
-               if i == srv_fd {
+       for fd in readfds {
+               if fd == srv_fd {
                    println!("need to accept new connection");
                    //TODO move code?
                    //accept new connection
@@ -117,8 +112,8 @@ fn main() {
                            add_client(&mut all_fdset, &mut clients, stream);
                        }
                    }
-               } else if child.is_stdout(i) {
-                   println!("child fd {} (stdout) got active", i);
+               } else if child.is_stdout(fd) {
+                   println!("child fd {} (stdout) got active", fd);
                    let child_eof = forward_to_remotes(child.stdout_as_mut(), &clients);
                    if child_eof {
                        println!("!!!!!!! child exited. pipe will break now");
@@ -126,24 +121,21 @@ fn main() {
                        //ahh, ownership!
                    }
                    assert!(!child_eof, "child exited, unhandled!");
-               } else if child.is_stderr(i) {
-                   println!("child fd {} (stderr) got active", i);
+               } else if child.is_stderr(fd) {
+                   println!("child fd {} (stderr) got active", fd);
                    read_child(child.stderr_as_mut());
                } else {
-                   assert!(clients.contains_key(&i));
+                   assert!(clients.contains_key(&fd));
                    let cont = {
                        //let ref stream = clients[&i];
-                       let stream: &mut TcpStream= clients.get_mut(&i).unwrap();
+                       let stream: &mut TcpStream= clients.get_mut(&fd).unwrap();
                        //read_client(stream)
                        copy_to(stream, child.stdin_as_mut())
                    };
                    if !cont {
-                       del_client(&mut all_fdset, &mut clients, i);
+                       del_client(&mut all_fdset, &mut clients, fd);
                    };
                }
-               handled_fds += 1;
-           }
        }
-       assert_eq!(handled_fds, num_active);
     }
 }
