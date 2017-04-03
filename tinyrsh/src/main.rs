@@ -4,7 +4,6 @@ use std::collections::HashMap;
 use std::net::{TcpListener, TcpStream};
 use std::io::{Read, Write};
 use std::os::unix::io::{RawFd, AsRawFd};
-use tinyrsh::select as select;
 use tinyrsh::select::FdSet;
 use tinyrsh::child::PersistentChild;
 
@@ -100,42 +99,41 @@ fn main() {
        let readfds = all_fdset.readfds_select();
 
        for fd in readfds {
-               if fd == srv_fd {
-                   println!("need to accept new connection");
-                   //TODO move code?
-                   //accept new connection
-                   match listener.accept() {
-                       Err(e) => println!("couldn't get client: {:?}", e),
-                       Ok((mut stream, addr)) => {
-                           println!("new client: {:?}", addr);
-                           greet_client(&mut stream);
-                           add_client(&mut all_fdset, &mut clients, stream);
-                       }
-                   }
-               } else if child.is_stdout(fd) {
-                   println!("child fd {} (stdout) got active", fd);
-                   let child_eof = forward_to_remotes(child.stdout_as_mut(), &clients);
-                   if child_eof {
-                       println!("!!!!!!! child exited. pipe will break now");
-                       //println!("exit code: {}", child.wait().expect("child unexpected state"));
-                       //ahh, ownership!
-                   }
-                   assert!(!child_eof, "child exited, unhandled!");
-               } else if child.is_stderr(fd) {
-                   println!("child fd {} (stderr) got active", fd);
-                   read_child(child.stderr_as_mut());
-               } else {
-                   assert!(clients.contains_key(&fd));
-                   let cont = {
-                       //let ref stream = clients[&i];
-                       let stream: &mut TcpStream= clients.get_mut(&fd).unwrap();
-                       //read_client(stream)
-                       copy_to(stream, child.stdin_as_mut())
-                   };
-                   if !cont {
-                       del_client(&mut all_fdset, &mut clients, fd);
-                   };
-               }
+          if fd == srv_fd {
+              println!("Accepting new connection");
+              //TODO move code?
+              match listener.accept() {
+                  Err(e) => println!("couldn't get client: {:?}", e),
+                  Ok((mut stream, addr)) => {
+                      println!("new client: {:?}", addr);
+                      greet_client(&mut stream);
+                      add_client(&mut all_fdset, &mut clients, stream);
+                  }
+              }
+          } else if child.is_stdout(fd) {
+              println!("child fd {} (stdout) got active", fd);
+              let child_eof = forward_to_remotes(child.stdout_as_mut(), &clients);
+              if child_eof {
+                  println!("!!!!!!! child exited. pipe will break now");
+                  //println!("exit code: {}", child.wait().expect("child unexpected state"));
+                  //ahh, ownership!
+              }
+              assert!(!child_eof, "child exited, unhandled!");
+          } else if child.is_stderr(fd) {
+              println!("child fd {} (stderr) got active", fd);
+              read_child(child.stderr_as_mut());
+          } else {
+              assert!(clients.contains_key(&fd));
+              let cont = {
+                  //let ref stream = clients[&i];
+                  let stream: &mut TcpStream= clients.get_mut(&fd).unwrap();
+                  //read_client(stream)
+                  copy_to(stream, child.stdin_as_mut())
+              };
+              if !cont {
+                  del_client(&mut all_fdset, &mut clients, fd);
+              };
+          }
        }
     }
 }
