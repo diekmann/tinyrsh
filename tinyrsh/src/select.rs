@@ -4,6 +4,7 @@ use std::ptr::null_mut;
 use std::os::unix::io::RawFd;
 use libc::{c_int, timeval};
 use time::TimeVal;
+use std::cmp::max;
 
 pub const FD_SETSIZE: RawFd = 1024;
 
@@ -44,7 +45,6 @@ impl RawFdSet {
         self.bits[fd / BITS] &= !(1 << (fd % BITS));
     }
 
-    //pub fn contains(&mut self, fd: RawFd) -> bool {
     pub fn contains(& self, fd: RawFd) -> bool {
         let fd = fd as usize;
         self.bits[fd / BITS] & (1 << (fd % BITS)) > 0
@@ -107,3 +107,50 @@ pub fn select(nfds: c_int,
 
     res
 }
+
+
+#[derive(Clone)]
+pub struct FdSet {
+    pub raw_fd_set: RawFdSet,
+    pub high_fd: c_int,
+}
+
+impl FdSet {
+    pub fn new() -> Self {
+        FdSet { raw_fd_set: RawFdSet::new(), high_fd: 0 }
+    }
+
+    pub fn insert(&mut self, fd: RawFd) {
+        self.raw_fd_set.insert(fd);
+        self.high_fd = max(self.high_fd, fd);
+    }
+
+    pub fn remove(&mut self, fd: RawFd) {
+        self.raw_fd_set.remove(fd);
+        if fd >= self.high_fd {
+            self.high_fd =  self.raw_fd_set.compute_max_fd();
+        }
+    }
+
+    pub fn contains(&self, fd: RawFd) -> bool {
+        self.raw_fd_set.contains(fd)
+    }
+
+    pub fn clear(&mut self) {
+        self.raw_fd_set.clear();
+        self.high_fd = 0;
+    }
+
+    pub fn debug(&self) -> String {
+        let maxfd = self.raw_fd_set.compute_max_fd();
+        assert_eq!(maxfd, self.high_fd);
+        //TODO after reset, make _eq again!!
+        //assert!(maxfd <= self.high_fd);
+        format!("{} (highfd: {})", self.raw_fd_set.debug(), self.high_fd)
+    }
+}
+
+
+
+
+

@@ -5,7 +5,7 @@ use std::net::{TcpListener, TcpStream};
 use std::io::{Read, Write};
 use std::os::unix::io::{RawFd, AsRawFd};
 use tinyrsh::select as select;
-use tinyrsh::select::RawFdSet;
+use tinyrsh::select::FdSet;
 use tinyrsh::child::PersistentChild;
 
 
@@ -68,7 +68,7 @@ fn main() {
 
     let listener = TcpListener::bind("127.0.0.1:6699").unwrap();
 
-    let mut all_fdset = RawFdSet::new();
+    let mut all_fdset = FdSet::new();
     let srv_fd = listener.as_raw_fd(); // not consumed
     
     //high fd for select() call
@@ -82,14 +82,14 @@ fn main() {
 
     let mut clients: HashMap<RawFd, TcpStream> = HashMap::new(); //could also use FromRawFd
 
-    fn add_client(all_fdset: &mut RawFdSet, clients: &mut HashMap<RawFd, TcpStream>, stream: TcpStream) -> RawFd {
+    fn add_client(all_fdset: &mut FdSet, clients: &mut HashMap<RawFd, TcpStream>, stream: TcpStream) -> RawFd {
         let stream_fd: RawFd = stream.as_raw_fd(); //not consume
         println!("inserted fd {}", stream_fd);
         clients.insert(stream_fd, stream);
         all_fdset.insert(stream_fd);
         stream_fd
     };
-    fn del_client(all_fdset: &mut RawFdSet, clients: &mut HashMap<RawFd, TcpStream>, stream_fd: RawFd) {
+    fn del_client(all_fdset: &mut FdSet, clients: &mut HashMap<RawFd, TcpStream>, stream_fd: RawFd) {
         assert!(clients.contains_key(&stream_fd));
         //let stream = clients.get(&stream_fd);
         println!("removing fd {}", stream_fd);
@@ -101,10 +101,15 @@ fn main() {
 
    println!("select-looping");
    loop {
+       //println!("all_fdset debug: {}", all_fdset.debug());
        let mut fdset = all_fdset.clone();
-       let res = select::select(high_fd + 1, Some(&mut fdset), None, None, None);
+       assert_eq!(high_fd, all_fdset.high_fd);
+       assert_eq!(high_fd, fdset.high_fd);
+       let res = select::select(high_fd + 1, Some(&mut fdset.raw_fd_set), None, None, None);
+       assert!(high_fd >= fdset.high_fd);
        assert!(res > 0);
        println!("selected returned {}", res);
+        //TODO assertion fails because select, ...
        println!("fdset debug: {}", fdset.debug());
 
        let mut accept_new = false;
