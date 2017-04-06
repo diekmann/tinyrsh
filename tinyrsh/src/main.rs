@@ -6,6 +6,7 @@ use std::io::{Read, Write};
 use std::os::unix::io::{RawFd, AsRawFd};
 use tinyrsh::select::FdSet;
 use tinyrsh::child::PersistentChild;
+use tinyrsh::fdstore::FdStore;
 
 
 fn greet_client(mut stream: &TcpStream) {
@@ -67,52 +68,33 @@ fn main() {
 
     let listener = TcpListener::bind("127.0.0.1:6699").unwrap();
 
-    let mut all_fdset = FdSet::new();
-    let srv_fd = listener.as_raw_fd(); // not consumed
+    let mut fdstore = FdStore::new(listener);
     
-    for fd in [srv_fd, child.child.stdout.as_ref().unwrap().as_raw_fd(), child.child.stderr.as_ref().unwrap().as_raw_fd()].iter() {
-        println!("inserting fd {}", fd);
-        all_fdset.insert(*fd);
+    for fd in [child.child.stdout.as_ref().unwrap().as_raw_fd(), child.child.stderr.as_ref().unwrap().as_raw_fd()].iter() {
+        println!("inserting child fd {}", fd);
+        fdstore.all_fdset.insert(*fd);
     };
 
-    let mut clients: HashMap<RawFd, TcpStream> = HashMap::new(); //could also use FromRawFd
-
-    fn add_client(all_fdset: &mut FdSet, clients: &mut HashMap<RawFd, TcpStream>, stream: TcpStream) -> RawFd {
-        let stream_fd: RawFd = stream.as_raw_fd(); //not consume
-        println!("inserted fd {}", stream_fd);
-        clients.insert(stream_fd, stream);
-        all_fdset.insert(stream_fd);
-        stream_fd
-    };
-    fn del_client(all_fdset: &mut FdSet, clients: &mut HashMap<RawFd, TcpStream>, stream_fd: RawFd) {
-        assert!(clients.contains_key(&stream_fd));
-        //let stream = clients.get(&stream_fd);
-        println!("removing fd {}", stream_fd);
-        assert!(all_fdset.contains(stream_fd));
-        all_fdset.remove(stream_fd);
-        assert!(clients.contains_key(&stream_fd));
-        clients.remove(&stream_fd);
-    };
-
+    
    println!("select-looping");
    loop {
-       let readfds = all_fdset.readfds_select();
+       let readfds = fdstore.all_fdset.readfds_select();
 
        for fd in readfds {
-          if fd == srv_fd {
+          if fd == fdstore.srv_sock.as_raw_fd() {
               println!("Accepting new connection");
               //TODO move code?
-              match listener.accept() {
+              match fdstore.srv_sock.accept() {
                   Err(e) => println!("couldn't get client: {:?}", e),
                   Ok((mut stream, addr)) => {
                       println!("new client: {:?}", addr);
                       greet_client(&mut stream);
-                      add_client(&mut all_fdset, &mut clients, stream);
+                      fdstore.add_client(stream);
                   }
               }
           } else if child.is_stdout(fd) {
               println!("child fd {} (stdout) got active", fd);
-              let child_eof = forward_to_remotes(child.stdout_as_mut(), &clients);
+              let child_eof = forward_to_remotes(child.stdout_as_mut(), &fdstore.clients);
               if child_eof {
                   println!("!!!!!!! child exited. pipe will break now");
                   //println!("exit code: {}", child.wait().expect("child unexpected state"));
@@ -123,15 +105,15 @@ fn main() {
               println!("child fd {} (stderr) got active", fd);
               read_child(child.stderr_as_mut());
           } else {
-              assert!(clients.contains_key(&fd));
+              assert!(fdstore.clients.contains_key(&fd));
               let cont = {
                   //let ref stream = clients[&i];
-                  let stream: &mut TcpStream= clients.get_mut(&fd).unwrap();
+                  let stream: &mut TcpStream = fdstore.clients.get_mut(&fd).unwrap();
                   //read_client(stream)
                   copy_to(stream, child.stdin_as_mut())
               };
               if !cont {
-                  del_client(&mut all_fdset, &mut clients, fd);
+                  fdstore.del_client(fd);
               };
           }
        }
