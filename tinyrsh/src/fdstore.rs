@@ -1,7 +1,7 @@
 
 use std::collections::HashMap;
 use std::net::{TcpListener, TcpStream, SocketAddr};
-use std::io::{Read, Write};
+use std::io::Read;
 use std::io;
 use std::process;
 use std::os::unix::io::{RawFd, AsRawFd};
@@ -16,12 +16,10 @@ pub struct FdStore {
     // the connected remote clients
     pub clients: HashMap<RawFd, TcpStream>, //connected clients
 
-    //TODO add child too
     pub child: PersistentChild,
 
     // private auxiliary data
-    //TODO make private once we got child in
-    pub all_fdset: FdSet,
+    all_fdset: FdSet,
 }
 
 
@@ -57,8 +55,8 @@ impl FdStore {
                   srv_ready: &Fn(OnceAccept, &Self) -> io::Result<TcpStream>,
                   remote_ready: &Fn(OnceRead<TcpStream>, &mut process::ChildStdin) -> bool,
                   child_stdout_ready: &Fn(OnceRead<process::ChildStdout>, &HashMap<RawFd, TcpStream>) -> (),
-                  ) -> Vec<OnceAction> {
-        let mut active = vec![];
+                  child_stderr_ready: &Fn(OnceRead<process::ChildStderr>, &HashMap<RawFd, TcpStream>) -> (),
+                  ) -> () {
         let readfds = self.all_fdset.readfds_select();
 
         for fd in readfds {
@@ -73,6 +71,8 @@ impl FdStore {
                 };
             } else if self.child.is_stdout(fd) {
                 child_stdout_ready(OnceRead{ r: self.child.stdout_as_mut() }, &self.clients);
+            } else if self.child.is_stderr(fd) {
+                child_stderr_ready(OnceRead{ r: self.child.stderr_as_mut() }, &self.clients);
             } else if self.clients.contains_key(&fd){
                 // client connection demands attention
                 let cont = {
@@ -85,19 +85,14 @@ impl FdStore {
                     self.del_client(fd);
                 }
             } else {
-                active.push(OnceAction::Other(fd));
+                assert!(false, "unknown fd");
             }
         }
-    active
     }
 }
 
 pub struct OnceAccept<'a>{ listener: &'a TcpListener }
 pub struct OnceRead<'a, T: Read + 'a>{ r: &'a mut T }
-
-pub enum OnceAction {
-    Other(RawFd),
-}
 
 impl <'a>OnceAccept<'a> {
     pub fn do_accept(self) -> io::Result<(TcpStream, SocketAddr)> {
