@@ -1,0 +1,7 @@
+[package]
+name = "tinyrsh"
+version = "0.1.0"
+authors = ["diekmann <diekmann@net.in.tum.de>"]
+
+[dependencies]
+libc = "0.2.21"

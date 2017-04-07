@@ -23,6 +23,13 @@ All implementations start a basic server with `socket`, `bind`, `listen`, `accep
    - (almost) feature complete: reaping zombies, handling multiple connections in parallel, no race condition in signal handling
    - problem: printing low level debug information (pids if childs, ...) is hard. Overall, this is still the nicest implementation
 
+ - rust-selectframework
+   - overly architected framework around the select call.
+   - first spawns the process, allows to attach connected clients afterwards
+   - (almost) no resource allocation at runtime (at least not a fork). Should work even if your system is forkbombed (not actually tested)
+   - framework character: you have to hand over control to my framework. Not very awesome
+   - compiletime check that you read/accept the filedescriptors which are marked ready by select at most once. Did I mention: compile time check!
+
 None of these implementation spawns a terminal. It is not possible to do `su` or open a python shell.
 
 
