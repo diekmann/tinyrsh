@@ -54,8 +54,9 @@ impl FdStore {
     }
 
     pub fn select(&mut self,
-                  srv_ready: &Fn(&Self, OnceAccept) -> io::Result<TcpStream>,
+                  srv_ready: &Fn(OnceAccept, &Self) -> io::Result<TcpStream>,
                   remote_ready: &Fn(OnceRead<TcpStream>, &mut process::ChildStdin) -> bool,
+                  child_stdout_ready: &Fn(OnceRead<process::ChildStdout>, &HashMap<RawFd, TcpStream>) -> (),
                   ) -> Vec<OnceAction> {
         let mut active = vec![];
         let readfds = self.all_fdset.readfds_select();
@@ -63,13 +64,15 @@ impl FdStore {
         for fd in readfds {
             if fd == self.srv_sock.as_raw_fd() {
                 // server socket wants to accept new connection
-                match srv_ready(self, OnceAccept{ listener: &self.srv_sock}) {
+                match srv_ready(OnceAccept{ listener: &self.srv_sock}, self) {
                   Err(e) => println!("not accepting? {:?}", e),
                   Ok(stream) => {
                       println!("adding new client");
                       self.add_client(stream);
                   }
                 };
+            } else if self.child.is_stdout(fd) {
+                child_stdout_ready(OnceRead{ r: self.child.stdout_as_mut() }, &self.clients);
             } else if self.clients.contains_key(&fd){
                 // client connection demands attention
                 let cont = {

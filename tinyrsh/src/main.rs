@@ -81,7 +81,7 @@ fn main() {
    loop {
        //let readfds = fdstore.all_fdset.readfds_select();
        //for fd in readfds {
-       let srvacceptfun = | allfd: &FdStore, a: OnceAccept | -> io::Result<TcpStream> {
+       let srvacceptfun = |  a: OnceAccept, allfd: &FdStore | -> io::Result<TcpStream> {
               println!("Accepting new connection");
               a.do_accept().map( | (mut stream, addr) | {
                       println!("new client: {:?}", addr);
@@ -95,23 +95,34 @@ fn main() {
             let written = to.write(&buf[..n]).expect("copy_to write");
             to.flush();
             assert_eq!(n, written);
-
             n != 0
-            };
-       let active_vec = fdstore.select(&srvacceptfun, &clientfun);
+           };
+       let childstdoutfun = | stdout: OnceRead<process::ChildStdout>, clients: &HashMap<RawFd, TcpStream> | -> () {
+            println!("child (stdout) got active");
+            let mut buf = [0; 10];
+            let n = stdout.do_read(&mut buf).expect("read_child");
+            let child_eof = (n == 0);
+            if clients.is_empty() {
+                println!("Warning: child output but no remote connected");
+                println!("{:?} ({} bytes) `{}'", buf, n, String::from_utf8_lossy(&buf[..n]));
+            }
+            for mut remote in clients.values(){
+                //println!("forwarding to {}", remote.peer_addr().unwrap());
+                let written = remote.write(&buf[..n]).expect("remote write");
+                assert_eq!(n, written);
+            }
+            if child_eof {
+                println!("!!!!!!! child exited. pipe will break now");
+                //println!("exit code: {}", child.wait().expect("child unexpected state"));
+                //ahh, ownership!
+            }
+            assert!(!child_eof, "child exited, unhandled!");
+           };
+       let active_vec = fdstore.select(&srvacceptfun, &clientfun, &childstdoutfun);
        for active in active_vec {
        match active {
           OnceAction::Other(fd) => {
-          if fdstore.child.is_stdout(fd) {
-              println!("child fd {} (stdout) got active", fd);
-              let child_eof = forward_to_remotes(fdstore.child.stdout_as_mut(), &fdstore.clients);
-              if child_eof {
-                  println!("!!!!!!! child exited. pipe will break now");
-                  //println!("exit code: {}", child.wait().expect("child unexpected state"));
-                  //ahh, ownership!
-              }
-              assert!(!child_eof, "child exited, unhandled!");
-          } else if fdstore.child.is_stderr(fd) {
+          if fdstore.child.is_stderr(fd) {
               println!("child fd {} (stderr) got active", fd);
               read_child(fdstore.child.stderr_as_mut());
           } else {
