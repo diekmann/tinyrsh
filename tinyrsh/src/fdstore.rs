@@ -6,6 +6,7 @@ use std::io;
 use std::process;
 use std::os::unix::io::{RawFd, AsRawFd};
 use select::FdSet;
+use child::PersistentChild;
 
 
 pub struct FdStore {
@@ -16,7 +17,7 @@ pub struct FdStore {
     pub clients: HashMap<RawFd, TcpStream>, //connected clients
 
     //TODO add child too
-
+    pub child: PersistentChild,
 
     // private auxiliary data
     //TODO make private once we got child in
@@ -25,11 +26,15 @@ pub struct FdStore {
 
 
 impl FdStore {
-    pub fn new(srv_sock: TcpListener) -> Self {
+    pub fn new(srv_sock: TcpListener, child: PersistentChild) -> Self {
         let srv_fd = srv_sock.as_raw_fd(); // not consumed
-        let mut s = FdStore {srv_sock: srv_sock, clients: HashMap::new(), all_fdset: FdSet::new()};
+        let mut s = FdStore {srv_sock: srv_sock, clients: HashMap::new(), child: child, all_fdset: FdSet::new()};
         println!("inserting srv fd {}", srv_fd);
         s.all_fdset.insert(srv_fd);
+        for fd in [s.child.child.stdout.as_ref().unwrap().as_raw_fd(), s.child.child.stderr.as_ref().unwrap().as_raw_fd()].iter() {
+            println!("inserting child fd {}", fd);
+            s.all_fdset.insert(*fd);
+        };
         s
     }
 
@@ -50,7 +55,6 @@ impl FdStore {
 
     pub fn select(&mut self,
                   srv_ready: &Fn(&Self, OnceAccept) -> io::Result<TcpStream>,
-                  child_stdin_hack: &mut process::ChildStdin, //hack to pass to following function
                   remote_ready: &Fn(OnceRead<TcpStream>, &mut process::ChildStdin) -> bool,
                   ) -> Vec<OnceAction> {
         let mut active = vec![];
@@ -71,7 +75,7 @@ impl FdStore {
                 let cont = {
                     let stream: &mut TcpStream = self.clients.get_mut(&fd).unwrap();
                     let r = OnceRead { r: stream };
-                    remote_ready(r, child_stdin_hack)
+                    remote_ready(r, self.child.stdin_as_mut())
                 };
                 if !cont {
                     println!("client exited");

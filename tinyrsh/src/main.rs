@@ -74,13 +74,8 @@ fn main() {
 
     let listener = TcpListener::bind("127.0.0.1:6699").unwrap();
 
-    let mut fdstore = FdStore::new(listener);
+    let mut fdstore = FdStore::new(listener, child);
     
-    for fd in [child.child.stdout.as_ref().unwrap().as_raw_fd(), child.child.stderr.as_ref().unwrap().as_raw_fd()].iter() {
-        println!("inserting child fd {}", fd);
-        fdstore.all_fdset.insert(*fd);
-    };
-
     
    println!("select-looping");
    loop {
@@ -94,8 +89,6 @@ fn main() {
                       stream
               })
            };
-       //let to: &mut process::ChildStdin = child.stdin_as_mut();
-       //HACK, passed as parameter because of borrowing!
        let clientfun = | client: OnceRead<TcpStream>, to: &mut process::ChildStdin | -> bool {
             let mut buf = [0; 10];
             let n = client.do_read(&mut buf).expect("copy_to read");
@@ -105,22 +98,22 @@ fn main() {
 
             n != 0
             };
-       let active_vec = fdstore.select(&srvacceptfun, child.stdin_as_mut(), &clientfun);
+       let active_vec = fdstore.select(&srvacceptfun, &clientfun);
        for active in active_vec {
        match active {
           OnceAction::Other(fd) => {
-          if child.is_stdout(fd) {
+          if fdstore.child.is_stdout(fd) {
               println!("child fd {} (stdout) got active", fd);
-              let child_eof = forward_to_remotes(child.stdout_as_mut(), &fdstore.clients);
+              let child_eof = forward_to_remotes(fdstore.child.stdout_as_mut(), &fdstore.clients);
               if child_eof {
                   println!("!!!!!!! child exited. pipe will break now");
                   //println!("exit code: {}", child.wait().expect("child unexpected state"));
                   //ahh, ownership!
               }
               assert!(!child_eof, "child exited, unhandled!");
-          } else if child.is_stderr(fd) {
+          } else if fdstore.child.is_stderr(fd) {
               println!("child fd {} (stderr) got active", fd);
-              read_child(child.stderr_as_mut());
+              read_child(fdstore.child.stderr_as_mut());
           } else {
               assert!(false, "unknown fd");
           }
