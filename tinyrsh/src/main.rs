@@ -10,14 +10,15 @@ use tinyrsh::child::PersistentChild;
 use tinyrsh::fdstore::{FdStore, OnceAction, OnceAccept};
 
 
-fn greet_client(mut stream: &TcpStream) {
-    let remote = stream.peer_addr().unwrap();
-    println!("connected: {}", remote);
-
-    match stream.write(b"hello\n") {
-        Err(e) => println!("{}", e),
-        Ok(n) => println!("wrote {} bytes", n),
-    };
+fn greet_client(fdstore: &FdStore, mut stream: &TcpStream) {
+   assert_eq!(stream.write(b"hello\n").expect("greet client failed"), 6);
+   stream.write(b"Your fellow peers:");
+   let mut v = vec![];
+   for other in fdstore.clients.keys() {
+       v.push(format!("fd {}", other));
+   }
+   stream.write(v.join(", ").as_bytes());
+   stream.write(b"\n");
 }
 
 fn read_child<T: Read>(readt: &mut T) {
@@ -83,17 +84,12 @@ fn main() {
        //for fd in readfds {
        let srvacceptfun = | allfd: &FdStore, a: OnceAccept | -> io::Result<TcpStream> {
               println!("Accepting new connection");
-              match a.do_accept() {
-                  Err(e) => { println!("couldn't get client: {:?}", e);
-                              Err(e)
-                  }
-                  Ok((mut stream, addr)) => {
+              a.do_accept().map( | (mut stream, addr) | {
                       println!("new client: {:?}", addr);
-                      greet_client(&mut stream);
-                      Ok(stream)
-                  }
-              }
-            };
+                      greet_client(allfd, &mut stream);
+                      stream
+              })
+           };
        let active_vec = fdstore.select(&srvacceptfun);
        for active in active_vec {
        match active {
