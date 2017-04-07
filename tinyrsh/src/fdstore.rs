@@ -1,7 +1,8 @@
 
 use std::collections::HashMap;
-use std::net::{TcpListener, TcpStream};
+use std::net::{TcpListener, TcpStream, SocketAddr};
 use std::io::{Read, Write};
+use std::io;
 use std::os::unix::io::{RawFd, AsRawFd};
 use select::FdSet;
 
@@ -41,4 +42,44 @@ impl FdStore {
         self.all_fdset.remove(client_fd);
         self.clients.remove(&client_fd);
     }
+
+    pub fn select(&mut self, srv_ready: &Fn(&Self, OnceAccept) -> io::Result<TcpStream>) -> Vec<OnceAction> {
+        let mut active = vec![];
+        let readfds = self.all_fdset.readfds_select();
+
+        for fd in readfds {
+            if fd == self.srv_sock.as_raw_fd() {
+                let newclient = {
+                    let w = OnceAccept{ listener: &self.srv_sock};
+                    srv_ready(self, w)
+                };
+                match newclient {
+                  Err(e) => println!("not accepting? {:?}", e),
+                  Ok(stream) => {
+                      println!("adding new client");
+                      self.add_client(stream);
+                  }
+                };
+            } else {
+                active.push(OnceAction::Other(fd));
+            }
+        }
+    active
+    }
 }
+
+pub struct OnceAccept<'a>{ listener: &'a TcpListener }
+pub struct OnceRead<T: Read>{ r: T }
+
+pub enum OnceAction {
+//    SrvAccept(OnceAccept<'a>),
+//    ClientRead(OnceRead<TcpStream>),
+    Other(RawFd),
+}
+
+impl <'a>OnceAccept<'a> {
+    pub fn do_accept(self) -> io::Result<(TcpStream, SocketAddr)> {
+        self.listener.accept()
+    }
+}
+

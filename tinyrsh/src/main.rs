@@ -3,10 +3,11 @@ extern crate tinyrsh;
 use std::collections::HashMap;
 use std::net::{TcpListener, TcpStream};
 use std::io::{Read, Write};
+use std::io;
 use std::os::unix::io::{RawFd, AsRawFd};
 use tinyrsh::select::FdSet;
 use tinyrsh::child::PersistentChild;
-use tinyrsh::fdstore::FdStore;
+use tinyrsh::fdstore::{FdStore, OnceAction, OnceAccept};
 
 
 fn greet_client(mut stream: &TcpStream) {
@@ -78,21 +79,26 @@ fn main() {
     
    println!("select-looping");
    loop {
-       let readfds = fdstore.all_fdset.readfds_select();
-
-       for fd in readfds {
-          if fd == fdstore.srv_sock.as_raw_fd() {
+       //let readfds = fdstore.all_fdset.readfds_select();
+       //for fd in readfds {
+       let srvacceptfun = | allfd: &FdStore, a: OnceAccept | -> io::Result<TcpStream> {
               println!("Accepting new connection");
-              //TODO move code?
-              match fdstore.srv_sock.accept() {
-                  Err(e) => println!("couldn't get client: {:?}", e),
+              match a.do_accept() {
+                  Err(e) => { println!("couldn't get client: {:?}", e);
+                              Err(e)
+                  }
                   Ok((mut stream, addr)) => {
                       println!("new client: {:?}", addr);
                       greet_client(&mut stream);
-                      fdstore.add_client(stream);
+                      Ok(stream)
                   }
               }
-          } else if child.is_stdout(fd) {
+            };
+       let active_vec = fdstore.select(&srvacceptfun);
+       for active in active_vec {
+       match active {
+          OnceAction::Other(fd) => {
+          if child.is_stdout(fd) {
               println!("child fd {} (stdout) got active", fd);
               let child_eof = forward_to_remotes(child.stdout_as_mut(), &fdstore.clients);
               if child_eof {
@@ -116,6 +122,8 @@ fn main() {
                   fdstore.del_client(fd);
               };
           }
-       }
-    }
+          }//Other
+    } //match
+    } //for
+    } //loop
 }
