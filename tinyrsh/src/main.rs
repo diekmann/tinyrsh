@@ -19,6 +19,9 @@ fn greet_client(fdstore: &FdStore, mut stream: &TcpStream) {
    }
    stream.write(v.join(", ").as_bytes());
    stream.write(b"\n");
+   for mut client in fdstore.clients.values() {
+       client.write(b"new client connected\n");
+   }
 }
 
 fn read_child<T: Read>(readt: &mut T) {
