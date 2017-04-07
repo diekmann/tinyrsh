@@ -32,6 +32,10 @@ All implementations start a basic server with `socket`, `bind`, `listen`, `accep
 
 None of these implementation spawns a terminal. It is not possible to do `su` or open a python shell.
 
+### Aehh, well
+ - tinycontainer contains my custom user container runtime
+ - basically a copy of the man pages
+ - idea: once a working remote shell exits, contain of for security. seejuurityyy. because, ... well seccomp and safe languages are for production
 
 ### Overview: Get a Terminal
 In `py-ptysh`, a very very very hacky helper script to spawn a `/bin/sh` attached to a terminal can be found.
@@ -47,3 +51,4 @@ In `rsh-impls/hs-idiomatic2` resides the current working trunk of the actual imp
  - spawns the python helper to get a shell attached to a terminal
  - everything is line buffered, `man man` does not give a great experience
  - `su` and `python` shell over tinyrsh works
+ - oh an by the way, this information is heavily outdated. yolo. This is an experimental repo, never ever use that stuff in production.
