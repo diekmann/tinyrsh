@@ -4,10 +4,11 @@ use std::collections::HashMap;
 use std::net::{TcpListener, TcpStream};
 use std::io::{Read, Write};
 use std::io;
+use std::process;
 use std::os::unix::io::{RawFd, AsRawFd};
 use tinyrsh::select::FdSet;
 use tinyrsh::child::PersistentChild;
-use tinyrsh::fdstore::{FdStore, OnceAction, OnceAccept};
+use tinyrsh::fdstore::{FdStore, OnceAction, OnceAccept, OnceRead};
 
 
 fn greet_client(fdstore: &FdStore, mut stream: &TcpStream) {
@@ -93,7 +94,18 @@ fn main() {
                       stream
               })
            };
-       let active_vec = fdstore.select(&srvacceptfun);
+       //let to: &mut process::ChildStdin = child.stdin_as_mut();
+       //HACK, passed as parameter because of borrowing!
+       let clientfun = | client: OnceRead<TcpStream>, to: &mut process::ChildStdin | -> bool {
+            let mut buf = [0; 10];
+            let n = client.do_read(&mut buf).expect("copy_to read");
+            let written = to.write(&buf[..n]).expect("copy_to write");
+            to.flush();
+            assert_eq!(n, written);
+
+            n != 0
+            };
+       let active_vec = fdstore.select(&srvacceptfun, child.stdin_as_mut(), &clientfun);
        for active in active_vec {
        match active {
           OnceAction::Other(fd) => {
@@ -110,16 +122,7 @@ fn main() {
               println!("child fd {} (stderr) got active", fd);
               read_child(child.stderr_as_mut());
           } else {
-              assert!(fdstore.clients.contains_key(&fd));
-              let cont = {
-                  //let ref stream = clients[&i];
-                  let stream: &mut TcpStream = fdstore.clients.get_mut(&fd).unwrap();
-                  //read_client(stream)
-                  copy_to(stream, child.stdin_as_mut())
-              };
-              if !cont {
-                  fdstore.del_client(fd);
-              };
+              assert!(false, "unknown fd");
           }
           }//Other
     } //match
