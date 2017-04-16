@@ -9,24 +9,29 @@ use select::FdSet;
 use child::PersistentChild;
 
 
-pub struct FdStore {
+type Clients = HashMap<RawFd, TcpStream>;
+
+pub struct FdStore<Aux> {
     // the listening server socket
     srv_sock: TcpListener,
 
     // the connected remote clients
-    pub clients: HashMap<RawFd, TcpStream>, //connected clients
+    pub clients: Clients, //connected clients
 
     pub child: PersistentChild,
 
-    // private auxiliary data
+    //public auxiliary data
+    pub aux: Aux,
+
+    // private internal auxiliary data
     all_fdset: FdSet,
 }
 
 
-impl FdStore {
-    pub fn new(srv_sock: TcpListener, child: PersistentChild) -> Self {
+impl<Aux> FdStore<Aux> {
+    pub fn new(srv_sock: TcpListener, child: PersistentChild, aux: Aux) -> Self {
         let srv_fd = srv_sock.as_raw_fd(); // not consumed
-        let mut s = FdStore {srv_sock: srv_sock, clients: HashMap::new(), child: child, all_fdset: FdSet::new()};
+        let mut s = FdStore {srv_sock: srv_sock, clients: HashMap::new(), child: child, aux:aux, all_fdset: FdSet::new()};
         println!("inserting srv fd {}", srv_fd);
         s.all_fdset.insert(srv_fd);
         for fd in [s.child.child.stdout.as_ref().unwrap().as_raw_fd(), s.child.child.stderr.as_ref().unwrap().as_raw_fd()].iter() {
@@ -52,17 +57,17 @@ impl FdStore {
     }
 
     pub fn select(&mut self,
-                  srv_ready: &Fn(OnceAccept, &Self) -> io::Result<TcpStream>,
-                  remote_ready: &Fn(OnceRead<TcpStream>, &mut process::ChildStdin) -> bool,
-                  child_stdout_ready: &Fn(OnceRead<process::ChildStdout>, &HashMap<RawFd, TcpStream>) -> (),
-                  child_stderr_ready: &Fn(OnceRead<process::ChildStderr>, &HashMap<RawFd, TcpStream>) -> (),
+                  srv_ready: &Fn(OnceAccept, &Clients, &mut Aux) -> io::Result<TcpStream>,
+                  remote_ready: &Fn(OnceRead<TcpStream>, &mut process::ChildStdin, &mut Aux) -> bool,
+                  child_stdout_ready: &Fn(OnceRead<process::ChildStdout>, &Clients, &mut Aux) -> (),
+                  child_stderr_ready: &Fn(OnceRead<process::ChildStderr>, &Clients, &mut Aux) -> (),
                   ) -> () {
         let readfds = self.all_fdset.readfds_select();
 
         for fd in readfds {
             if fd == self.srv_sock.as_raw_fd() {
                 // server socket wants to accept new connection
-                match srv_ready(OnceAccept{ listener: &self.srv_sock}, self) {
+                match srv_ready(OnceAccept{ listener: &self.srv_sock}, &self.clients, &mut self.aux) {
                   Err(e) => println!("not accepting? {:?}", e),
                   Ok(stream) => {
                       println!("adding new client");
@@ -70,15 +75,15 @@ impl FdStore {
                   }
                 };
             } else if self.child.is_stdout(fd) {
-                child_stdout_ready(OnceRead{ r: self.child.stdout_as_mut() }, &self.clients);
+                child_stdout_ready(OnceRead{ r: self.child.stdout_as_mut() }, &self.clients, &mut self.aux);
             } else if self.child.is_stderr(fd) {
-                child_stderr_ready(OnceRead{ r: self.child.stderr_as_mut() }, &self.clients);
+                child_stderr_ready(OnceRead{ r: self.child.stderr_as_mut() }, &self.clients, &mut self.aux);
             } else if self.clients.contains_key(&fd){
                 // client connection demands attention
                 let cont = {
                     let stream: &mut TcpStream = self.clients.get_mut(&fd).unwrap();
                     let r = OnceRead { r: stream };
-                    remote_ready(r, self.child.stdin_as_mut())
+                    remote_ready(r, self.child.stdin_as_mut(), &mut self.aux)
                 };
                 if !cont {
                     println!("client exited");
