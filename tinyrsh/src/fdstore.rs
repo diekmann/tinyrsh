@@ -68,13 +68,24 @@ impl<Aux> FdStore<Aux> {
         self.clients.remove(&client_fd);
     }
 
+    fn child_eof(&mut self) {
+        println!("!!!!!!! child io returned EOF.");
+        println!("killing old child");
+        self.child.child.kill();
+        self.child.respawn();
+        self.update_fdset();
+        //println!("exit code: {}", child.wait().expect("child unexpected state"));
+    }
+
     pub fn select(&mut self,
                   srv_ready: &Fn(OnceAccept, &Clients, &mut Aux) -> io::Result<TcpStream>,
                   remote_ready: &Fn(OnceRead<TcpStream>, &mut process::ChildStdin, &mut Aux) -> bool,
-                  child_stdout_ready: &Fn(OnceRead<process::ChildStdout>, &Clients, &mut Aux) -> (),
-                  child_stderr_ready: &Fn(OnceRead<process::ChildStderr>, &Clients, &mut Aux) -> (),
+                  child_stdout_ready: &Fn(OnceRead<process::ChildStdout>, &Clients, &mut Aux) -> bool,
+                  child_stderr_ready: &Fn(OnceRead<process::ChildStderr>, &Clients, &mut Aux) -> bool,
                   ) -> () {
         let readfds = self.all_fdset.readfds_select();
+
+        let mut respawn_child = false;
 
         for fd in readfds {
             if fd == self.srv_sock.as_raw_fd() {
@@ -87,9 +98,11 @@ impl<Aux> FdStore<Aux> {
                   }
                 };
             } else if self.child.is_stdout(fd) {
-                child_stdout_ready(OnceRead{ r: self.child.stdout_as_mut() }, &self.clients, &mut self.aux);
+                let cont = child_stdout_ready(OnceRead{ r: self.child.stdout_as_mut() }, &self.clients, &mut self.aux);
+                if !cont { respawn_child = true; }
             } else if self.child.is_stderr(fd) {
-                child_stderr_ready(OnceRead{ r: self.child.stderr_as_mut() }, &self.clients, &mut self.aux);
+                let cont = child_stderr_ready(OnceRead{ r: self.child.stderr_as_mut() }, &self.clients, &mut self.aux);
+                if !cont { respawn_child = true; }
             } else if self.clients.contains_key(&fd){
                 // client connection demands attention
                 let cont = {
@@ -105,6 +118,9 @@ impl<Aux> FdStore<Aux> {
                 assert!(false, "unknown fd");
             }
         }
+
+        // only after all fds have been handled
+        if respawn_child {self.child_eof()}
     }
 }
 

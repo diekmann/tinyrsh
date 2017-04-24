@@ -8,14 +8,17 @@ pub struct PersistentChild {
 }
 
 impl PersistentChild {
-    pub fn new(cmd: &'static str) -> Self {
-        let child_proc = process::Command::new(cmd)
+    fn spawn(cmd: &str) -> process::Child {
+        process::Command::new(cmd)
                 .stdin(process::Stdio::piped())
                 .stdout(process::Stdio::piped())
                 .stderr(process::Stdio::piped())
                 .spawn()
-                .expect("failed to execute process");
+                .expect("failed to execute process")
+    }
 
+    pub fn new(cmd: &'static str) -> Self {
+        let child_proc = Self::spawn(cmd);
         //TODO, if I want to reuse the pipes, I need to keep them open and need to write my custom
         //child spawner -_-
         // If I keep both ends of the pipes open in the main process, I will not be able to read an
@@ -24,6 +27,10 @@ impl PersistentChild {
 
         println!("spawned child with pid {}", child_proc.id());
         PersistentChild{ cmd: cmd, child: child_proc }
+    }
+
+    pub fn respawn(&mut self) {
+        self.child = Self::spawn(self.cmd);
     }
 
     pub fn stdin_as_mut(&mut self) -> &mut process::ChildStdin {

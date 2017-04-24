@@ -62,7 +62,7 @@ fn main() {
             aux.rbytes += n as u64;
             n != 0
            };
-       let childstdoutfun = | stdout: OnceRead<process::ChildStdout>, clients: &HashMap<RawFd, TcpStream>, aux: &mut AuxData | -> () {
+       let childstdoutfun = | stdout: OnceRead<process::ChildStdout>, clients: &HashMap<RawFd, TcpStream>, aux: &mut AuxData | -> bool {
             println!("child (stdout) got active");
             let mut buf = [0; 10];
             let n = stdout.do_read(&mut buf).expect("read_child");
@@ -77,18 +77,14 @@ fn main() {
                 assert_eq!(n, written);
                 aux.wbytes += written as u64;
             }
-            if child_eof {
-                println!("!!!!!!! child exited. pipe will break now");
-                //println!("exit code: {}", child.wait().expect("child unexpected state"));
-                //ahh, ownership!
-            }
-            assert!(!child_eof, "child exited, unhandled!");
+            !child_eof
            };
-       let childstderrfun = | stderr: OnceRead<process::ChildStderr>, clients: &HashMap<RawFd, TcpStream>, aux: &mut AuxData | -> () {
+       let childstderrfun = | stderr: OnceRead<process::ChildStderr>, clients: &HashMap<RawFd, TcpStream>, aux: &mut AuxData | -> bool {
             println!("child (stderr) got active");
             let mut buf = [0; 10];
             let n = stderr.do_read(&mut buf).expect("read_child");
             println!("({} bytes) `{}'", n, String::from_utf8_lossy(&buf[..n]));
+            n != 0
            };
 
        //do all the stuff
