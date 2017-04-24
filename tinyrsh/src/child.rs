@@ -3,11 +3,12 @@ use std::os::unix::io::{RawFd, AsRawFd};
 
 
 pub struct PersistentChild {
+    cmd: &'static str,
     pub child : process::Child,
 }
 
 impl PersistentChild {
-    pub fn new(cmd: &str) -> Self {
+    pub fn new(cmd: &'static str) -> Self {
         let child_proc = process::Command::new(cmd)
                 .stdin(process::Stdio::piped())
                 .stdout(process::Stdio::piped())
@@ -22,7 +23,7 @@ impl PersistentChild {
         //  create new pipes when a child needs to be respawned
 
         println!("spawned child with pid {}", child_proc.id());
-        PersistentChild{ child: child_proc }
+        PersistentChild{ cmd: cmd, child: child_proc }
     }
 
     pub fn stdin_as_mut(&mut self) -> &mut process::ChildStdin {

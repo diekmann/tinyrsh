@@ -9,7 +9,7 @@ use select::FdSet;
 use child::PersistentChild;
 
 
-type Clients = HashMap<RawFd, TcpStream>;
+pub type Clients = HashMap<RawFd, TcpStream>;
 
 pub struct FdStore<Aux> {
     // the listening server socket
@@ -30,15 +30,27 @@ pub struct FdStore<Aux> {
 
 impl<Aux> FdStore<Aux> {
     pub fn new(srv_sock: TcpListener, child: PersistentChild, aux: Aux) -> Self {
-        let srv_fd = srv_sock.as_raw_fd(); // not consumed
         let mut s = FdStore {srv_sock: srv_sock, clients: HashMap::new(), child: child, aux:aux, all_fdset: FdSet::new()};
-        println!("inserting srv fd {}", srv_fd);
-        s.all_fdset.insert(srv_fd);
-        for fd in [s.child.child.stdout.as_ref().unwrap().as_raw_fd(), s.child.child.stderr.as_ref().unwrap().as_raw_fd()].iter() {
-            println!("inserting child fd {}", fd);
-            s.all_fdset.insert(*fd);
-        };
+        s.update_fdset();
         s
+    }
+
+    fn update_fdset(&mut self) {
+        self.all_fdset.clear();
+
+        let srv_fd = self.srv_sock.as_raw_fd(); // not consumed
+        println!("inserting srv fd {}", srv_fd);
+        self.all_fdset.insert(srv_fd);
+
+        for fd in [self.child.child.stdout.as_ref().unwrap().as_raw_fd(), self.child.child.stderr.as_ref().unwrap().as_raw_fd()].iter() {
+            println!("inserting child fd {}", fd);
+            self.all_fdset.insert(*fd);
+        };
+
+        for fd in self.clients.keys() {
+            println!("inserting client fd {}", fd);
+            self.all_fdset.insert(*fd);
+        };
     }
 
     pub fn add_client(&mut self, client: TcpStream) {
