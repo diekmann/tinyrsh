@@ -63,3 +63,19 @@ impl PersistentChild {
         Self::_unwrap_as_raw_fd(&self.child.stderr) == i
     }
 }
+
+
+mod ffi{
+    use libc::c_int;
+
+    type pid_t = u32;
+
+    extern {
+        pub fn waitpid(pid: pid_t, status: *mut c_int, options: c_int) -> pid_t;
+        //pub fn waitid(idtype: idtype_t, id: id_t, infop: siginfo_t *, options: c_int) -> c_int;
+        // want WNOWAIT to leave the child alone. just query whether it has exited
+    }
+
+    #[link(name = "cppdefs")]
+    extern {}
+}
