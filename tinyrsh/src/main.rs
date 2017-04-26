@@ -1,11 +1,9 @@
 extern crate tinyrsh;
 
-use std::collections::HashMap;
 use std::net::{TcpListener, TcpStream};
 use std::io::{Write};
 use std::io;
 use std::process;
-use std::os::unix::io::{RawFd};
 use tinyrsh::child::PersistentChild;
 use tinyrsh::fdstore::{FdStore, OnceAccept, OnceRead, Clients};
 
