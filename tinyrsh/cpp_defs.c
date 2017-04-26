@@ -10,3 +10,5 @@ int waitpidoptions_WEXITED = WEXITED;
 int waitpidoptions_WSTOPPED = WSTOPPED;
 int waitpidoptions_WNOWAIT = WNOWAIT;
 
+size_t sizeof_siginfo_t = sizeof(siginfo_t);
+

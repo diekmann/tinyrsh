@@ -65,7 +65,7 @@ impl PersistentChild {
 
     pub fn check_status(&self) -> bool{
         let pid = self.child.id();
-        ffi::has_terminated(pid);
+        ffi::has_terminated(pid)
     }
 }
 
@@ -83,17 +83,22 @@ mod ffi{
     pub fn has_terminated(pid: u32) -> bool {
         //let pid = pid as id_t; // std::process::Child::id returns u32 is pid
         //let pid = pid ad id_t;
+
+        assert_eq!(mem::size_of::<siginfo_t>(), sizeof_siginfo_t);
+
         let mut info: siginfo_t = unsafe { mem::zeroed() };
         let infop: *mut siginfo_t = &mut info;
         let ret = unsafe { waitid(waitpid_P_PID, pid, infop, waitpidoptions_WNOHANG | waitpidoptions_WEXITED | waitpidoptions_WNOWAIT) };
         assert_eq!(ret, 0);
         assert_eq!(info.si_signo, SIGCHLD);
-        assert_eq!(info.si_pid, pid);
+        //assert_eq!(info.si_pid, pid);
         false
     }
 
     //#[link(name = "cppdefs", kind="static")]
     extern {
+        static sizeof_siginfo_t: usize;
+
         static waitpidoptions_WNOHANG: c_int;
         static waitpidoptions_WUNTRACED: c_int;
         static waitpidoptions_WCONTINUED: c_int;
