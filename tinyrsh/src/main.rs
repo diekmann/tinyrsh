@@ -24,7 +24,7 @@ fn main() {
 
     let child = PersistentChild::new("../py-ptysh/ptysh.py");
 
-    println!("{}", child.check_status());
+    println!("child terminated? {}", child.has_terminated());
 
     // TODO linebuffered? how is child output buffered at all?
     let listener = TcpListener::bind("127.0.0.1:6699").unwrap();

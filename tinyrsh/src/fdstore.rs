@@ -70,6 +70,10 @@ impl<Aux> FdStore<Aux> {
 
     fn child_eof(&mut self) {
         println!("!!!!!!! child io returned EOF.");
+        if self.child.has_terminated() {
+            println!("seems like child has terminated");
+            println!("return code: {}", self.child.child.wait().expect("wait"));
+        }
         println!("killing old child");
         self.child.child.kill();
         self.child.respawn();

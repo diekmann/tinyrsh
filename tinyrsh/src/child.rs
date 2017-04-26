@@ -63,7 +63,8 @@ impl PersistentChild {
         Self::_unwrap_as_raw_fd(&self.child.stderr) == i
     }
 
-    pub fn check_status(&self) -> bool{
+    // returns immediately, does not reap!
+    pub fn has_terminated(&self) -> bool{
         let pid = self.child.id();
         ffi::has_terminated(pid)
     }
@@ -71,13 +72,25 @@ impl PersistentChild {
 
 
 mod ffi{
-    use libc::{c_int, pid_t, siginfo_t, idtype_t, id_t, SIGCHLD};
+    use libc::{c_int, pid_t, uid_t, idtype_t, id_t, SIGCHLD};
     use std::mem;
 
     extern {
         fn waitpid(pid: pid_t, status: *mut c_int, options: c_int) -> pid_t;
         fn waitid(idtype: idtype_t, id: id_t, infop: *mut siginfo_t, options: c_int) -> c_int;
         // want WNOWAIT to leave the child alone. just query whether it has exited
+    } 
+
+    struct siginfo_t {
+        pub si_signo: c_int,
+        pub si_errno: c_int,
+        pub si_code: c_int,
+        pub si_trapno: c_int,
+        pub si_pid: pid_t,
+        pub si_uid: uid_t,
+        pub si_status: c_int,
+        pub _pad: [c_int; 25],
+        // some fields omitted
     }
 
     pub fn has_terminated(pid: u32) -> bool {
@@ -90,9 +103,13 @@ mod ffi{
         let infop: *mut siginfo_t = &mut info;
         let ret = unsafe { waitid(waitpid_P_PID, pid, infop, waitpidoptions_WNOHANG | waitpidoptions_WEXITED | waitpidoptions_WNOWAIT) };
         assert_eq!(ret, 0);
-        assert_eq!(info.si_signo, SIGCHLD);
-        //assert_eq!(info.si_pid, pid);
-        false
+        if info.si_pid != 0 {
+            assert_eq!(info.si_pid, pid as pid_t);
+            assert_eq!(info.si_signo, SIGCHLD);
+            true
+        }else{
+            false
+        }
     }
 
     //#[link(name = "cppdefs", kind="static")]
