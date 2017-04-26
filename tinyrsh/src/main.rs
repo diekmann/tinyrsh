@@ -23,6 +23,9 @@ fn main() {
     let mut aux = AuxData{ total_cons: 0, rbytes:0, wbytes:0 };
 
     let child = PersistentChild::new("../py-ptysh/ptysh.py");
+
+    println!("{}", child.check_status());
+
     // TODO linebuffered? how is child output buffered at all?
     let listener = TcpListener::bind("127.0.0.1:6699").unwrap();
 

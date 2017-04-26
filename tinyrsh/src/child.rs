@@ -62,24 +62,45 @@ impl PersistentChild {
     pub fn is_stderr(&self, i: RawFd) -> bool {
         Self::_unwrap_as_raw_fd(&self.child.stderr) == i
     }
+
+    pub fn check_status(&self) -> bool{
+        let pid = self.child.id();
+        ffi::has_terminated(pid);
+    }
 }
 
 
 mod ffi{
-    use libc::c_int;
-
-    type pid_t = u32;
+    use libc::{c_int, pid_t, siginfo_t, idtype_t, id_t, SIGCHLD};
+    use std::mem;
 
     extern {
-        pub fn waitpid(pid: pid_t, status: *mut c_int, options: c_int) -> pid_t;
-        //pub fn waitid(idtype: idtype_t, id: id_t, infop: siginfo_t *, options: c_int) -> c_int;
+        fn waitpid(pid: pid_t, status: *mut c_int, options: c_int) -> pid_t;
+        fn waitid(idtype: idtype_t, id: id_t, infop: *mut siginfo_t, options: c_int) -> c_int;
         // want WNOWAIT to leave the child alone. just query whether it has exited
+    }
+
+    pub fn has_terminated(pid: u32) -> bool {
+        //let pid = pid as id_t; // std::process::Child::id returns u32 is pid
+        //let pid = pid ad id_t;
+        let mut info: siginfo_t = unsafe { mem::zeroed() };
+        let infop: *mut siginfo_t = &mut info;
+        let ret = unsafe { waitid(waitpid_P_PID, pid, infop, waitpidoptions_WNOHANG | waitpidoptions_WEXITED | waitpidoptions_WNOWAIT) };
+        assert_eq!(ret, 0);
+        assert_eq!(info.si_signo, SIGCHLD);
+        assert_eq!(info.si_pid, pid);
+        false
     }
 
     //#[link(name = "cppdefs", kind="static")]
     extern {
+        static waitpidoptions_WNOHANG: c_int;
         static waitpidoptions_WUNTRACED: c_int;
-    }
+        static waitpidoptions_WCONTINUED: c_int;
+        static waitpidoptions_WEXITED: c_int;
+        static waitpidoptions_WSTOPPED: c_int;
+        static waitpidoptions_WNOWAIT: c_int;
 
-    //static footest: &'static c_int = &waitpidoptions_WUNTRACED;
+        static waitpid_P_PID: idtype_t;
+    }
 }
