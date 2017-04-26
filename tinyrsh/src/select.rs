@@ -179,8 +179,7 @@ impl FdSet {
         let numactive = select(self.high_fd + 1, Some(&mut ret.raw_fd_set), None, None, None);
         let maxfd = ret.raw_fd_set.compute_max_fd();
         assert!(maxfd <= self.high_fd);
-        println!("readfds_select {} active: {} (all high: {})", numactive, ret.raw_fd_set.debug(), self.high_fd);
-        //(numactive, FdSet{ raw_fd_set: rfds, high_fd: maxfd })
+        //println!("readfds_select {} active: {} (all high: {})", numactive, ret.raw_fd_set.debug(), self.high_fd);
         ret
     }
 }

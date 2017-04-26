@@ -7,7 +7,7 @@ use std::io;
 use std::process;
 use std::os::unix::io::{RawFd};
 use tinyrsh::child::PersistentChild;
-use tinyrsh::fdstore::{FdStore, OnceAccept, OnceRead};
+use tinyrsh::fdstore::{FdStore, OnceAccept, OnceRead, Clients};
 
 
 #[derive(Debug)]
@@ -37,7 +37,7 @@ fn main() {
 
     let child = PersistentChild::new("../py-ptysh/ptysh.py");
 
-    println!("child terminated? {}", child.has_terminated());
+    assert!(!child.has_terminated());
 
     // TODO linebuffered? how is child output buffered at all?
     let listener = TcpListener::bind("127.0.0.1:6699").unwrap();
@@ -47,7 +47,7 @@ fn main() {
     
    println!("select-looping");
    loop {
-       let srvacceptfun = |  a: OnceAccept, clients: &HashMap<RawFd, TcpStream>, aux: &mut AuxData | -> io::Result<TcpStream> {
+       let srvacceptfun = |  a: OnceAccept, clients: &Clients, aux: &mut AuxData | -> io::Result<TcpStream> {
               println!("Accepting new connection");
               aux.total_cons += 1;
               println!("{:?}", aux);
@@ -56,8 +56,8 @@ fn main() {
                       assert_eq!(stream.write(b"hello\n").expect("greet client failed"), 6);
                       stream.write_all(b"Your fellow peers:").expect("client write");
                       let mut v = vec![];
-                      for other in clients.keys() {
-                          v.push(format!("fd {}", other));
+                      for other in clients.values() {
+                          v.push(format!("ip {}", other.peer_addr().expect("peer addr")));
                       }
                       stream.write_all(v.join(", ").as_bytes()).expect("client write");
                       stream.write(b"\n").expect("client write");
@@ -76,7 +76,7 @@ fn main() {
             aux.rbytes += n as u64;
             n != 0
            };
-       let childstdoutfun = | stdout: OnceRead<process::ChildStdout>, clients: &HashMap<RawFd, TcpStream>, aux: &mut AuxData | -> bool {
+       let childstdoutfun = | stdout: OnceRead<process::ChildStdout>, clients: &Clients, aux: &mut AuxData | -> bool {
             println!("child (stdout) got active");
             let mut buf = [0; 1024];
             let n = stdout.do_read(&mut buf).expect("read_child");
@@ -93,7 +93,7 @@ fn main() {
             }
             !child_eof
            };
-       let childstderrfun = | stderr: OnceRead<process::ChildStderr>, clients: &HashMap<RawFd, TcpStream>, aux: &mut AuxData | -> bool {
+       let childstderrfun = | stderr: OnceRead<process::ChildStderr>, clients: &Clients, aux: &mut AuxData | -> bool {
             println!("child (stderr) got active");
             let mut buf = [0; 1024];
             let n = stderr.do_read(&mut buf).expect("read_child");
