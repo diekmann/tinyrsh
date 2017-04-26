@@ -17,6 +17,19 @@ struct AuxData {
     wbytes: u64,
 }
 
+//print only safe ascii characters for debugging. In particular don't print shell escapes.
+fn safe_ascii_debug(v: &[u8]) -> String {
+    let mut s = String::new();
+    for &c in v.iter() {
+        if c >= 0x20u8 && c <= 0x7Eu8 && c != 0x5Cu8 {
+            s.push(c as char);
+        } else {
+            s.push('X')
+        }
+    }
+    s
+}
+
 fn main() {
     println!("Hello, world!");
 
@@ -57,7 +70,7 @@ fn main() {
               })
            };
        let clientfun = | client: OnceRead<TcpStream>, to: &mut process::ChildStdin, aux: &mut AuxData | -> bool {
-            let mut buf = [0; 10];
+            let mut buf = [0; 1024];
             let n = client.do_read(&mut buf).expect("copy_to read");
             let written = to.write(&buf[..n]).expect("copy_to write");
             to.flush();
@@ -67,12 +80,12 @@ fn main() {
            };
        let childstdoutfun = | stdout: OnceRead<process::ChildStdout>, clients: &HashMap<RawFd, TcpStream>, aux: &mut AuxData | -> bool {
             println!("child (stdout) got active");
-            let mut buf = [0; 10];
+            let mut buf = [0; 1024];
             let n = stdout.do_read(&mut buf).expect("read_child");
             let child_eof = n == 0;
             if clients.is_empty() {
                 println!("Warning: child output but no remote connected");
-                println!("{:?} ({} bytes) `{}'", buf, n, String::from_utf8_lossy(&buf[..n]));
+                println!("({} bytes) `{}'", n, safe_ascii_debug(&buf[..n]));
             }
             for mut remote in clients.values(){
                 //println!("forwarding to {}", remote.peer_addr().unwrap());
@@ -84,9 +97,9 @@ fn main() {
            };
        let childstderrfun = | stderr: OnceRead<process::ChildStderr>, clients: &HashMap<RawFd, TcpStream>, aux: &mut AuxData | -> bool {
             println!("child (stderr) got active");
-            let mut buf = [0; 10];
+            let mut buf = [0; 1024];
             let n = stderr.do_read(&mut buf).expect("read_child");
-            println!("({} bytes) `{}'", n, String::from_utf8_lossy(&buf[..n]));
+            println!("({} bytes) `{}'", n, safe_ascii_debug(&buf[..n]));
             n != 0
            };
 
