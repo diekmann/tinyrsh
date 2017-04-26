@@ -64,6 +64,7 @@ impl PersistentChild {
     }
 
     // returns immediately, does not reap!
+    // Child not modified.
     pub fn has_terminated(&self) -> bool{
         let pid = self.child.id();
         ffi::has_terminated(pid)
@@ -76,9 +77,7 @@ mod ffi{
     use std::mem;
 
     extern {
-        fn waitpid(pid: pid_t, status: *mut c_int, options: c_int) -> pid_t;
         fn waitid(idtype: idtype_t, id: id_t, infop: *mut siginfo_t, options: c_int) -> c_int;
-        // want WNOWAIT to leave the child alone. just query whether it has exited
     } 
 
     struct siginfo_t {
@@ -112,7 +111,7 @@ mod ffi{
         }
     }
 
-    //#[link(name = "cppdefs", kind="static")]
+    #[link(name = "cppdefs", kind="static")]
     extern {
         static sizeof_siginfo_t: usize;
 

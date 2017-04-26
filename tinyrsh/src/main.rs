@@ -47,8 +47,6 @@ fn main() {
     
    println!("select-looping");
    loop {
-       //let readfds = fdstore.all_fdset.readfds_select();
-       //for fd in readfds {
        let srvacceptfun = |  a: OnceAccept, clients: &HashMap<RawFd, TcpStream>, aux: &mut AuxData | -> io::Result<TcpStream> {
               println!("Accepting new connection");
               aux.total_cons += 1;
