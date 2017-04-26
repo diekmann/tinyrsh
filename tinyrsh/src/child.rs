@@ -76,6 +76,10 @@ mod ffi{
         // want WNOWAIT to leave the child alone. just query whether it has exited
     }
 
-    #[link(name = "cppdefs")]
-    extern {}
+    //#[link(name = "cppdefs", kind="static")]
+    extern {
+        static waitpidoptions_WUNTRACED: c_int;
+    }
+
+    //static footest: &'static c_int = &waitpidoptions_WUNTRACED;
 }
