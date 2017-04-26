@@ -5,6 +5,7 @@ use std::io::Read;
 use std::io;
 use std::process;
 use std::os::unix::io::{RawFd, AsRawFd};
+use std::thread;
 use select::FdSet;
 use child::PersistentChild;
 
@@ -70,12 +71,17 @@ impl<Aux> FdStore<Aux> {
 
     fn child_eof(&mut self) {
         println!("!!!!!!! child io returned EOF.");
-        if self.child.has_terminated() {
-            println!("seems like child has terminated");
-            println!("return code: {}", self.child.child.wait().expect("wait"));
+        let mut cnt = 0;
+        while !self.child.has_terminated() && cnt < 10 {
+            println!("seems like child has not terminated");
+            thread::sleep_ms(500);
+            cnt += 1;
         }
-        println!("killing old child");
-        self.child.child.kill();
+        if !self.child.has_terminated() {
+            println!("killing old child");
+            self.child.child.kill();
+        }
+        println!("return code: {}", self.child.child.wait().expect("wait"));
         self.child.respawn();
         self.update_fdset();
         //println!("exit code: {}", child.wait().expect("child unexpected state"));
