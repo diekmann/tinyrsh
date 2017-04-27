@@ -5,6 +5,7 @@
 #include <unistd.h>
 #include <errno.h>
 #include <string.h>
+#include <sys/mman.h>
 #include <limits.h>
 #include <fcntl.h>
 #include <sys/wait.h>
@@ -171,9 +172,10 @@ int main(int argc, char **argv){
   if (pipe(pipe_fd) == -1)
     errExit("pipe");
 
-  child_stack = malloc(STACK_SIZE);
-  if(!child_stack)
-    errExit("malloc child stack");
+  child_stack = mmap(NULL, STACK_SIZE, PROT_READ | PROT_WRITE,
+                     MAP_PRIVATE | MAP_ANONYMOUS | MAP_GROWSDOWN | MAP_STACK, -1, 0);
+  if (child_stack == MAP_FAILED)
+    errExit("mmap child stack");
   //TODO mprotect pages around stack!
 
   pid_t child_pid;
@@ -206,6 +208,10 @@ int main(int argc, char **argv){
   if (waitpid(child_pid, NULL, 0) == -1)    /* Wait for child */
     errExit("waitpid");
   printf("child has terminated\n");
+
+  doErrExit(munmap(child_stack, STACK_SIZE));
+
+  puts(strerror(errno));
 
   exit(EXIT_SUCCESS);
 }
