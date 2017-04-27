@@ -55,7 +55,10 @@ static int child_func(void* args){
   doErrExit(mount(0, "./mnt1/proc", "proc", MS_NOSUID|MS_NODEV|MS_NOEXEC, NULL));
 
   puts("cp busybox yolo");
-  system("cp busybox ./mnt1/busybox");
+  if(system("cp busybox ./mnt1/busybox") != 0){
+      puts("cp failed");
+      exit(EXIT_FAILURE);
+  }
 
   puts("pivot_root");
   doErrExit(mkdir("./mnt1/oldroot", 777));
@@ -67,7 +70,7 @@ static int child_func(void* args){
   puts("unount old root");
   doErrExit(umount2("/oldroot", MNT_DETACH));
 
-  puts("execl busybox sh");
+  puts("execl busybox sh (you still have capabilities!)");
   execl("/busybox", "busybox", "sh", NULL);
   errExit("exec");
 }
