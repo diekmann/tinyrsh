@@ -80,6 +80,7 @@ mod ffi{
         fn waitid(idtype: idtype_t, id: id_t, infop: *mut siginfo_t, options: c_int) -> c_int;
     } 
 
+    #[repr(C)]
     struct siginfo_t {
         pub si_signo: c_int,
         pub si_errno: c_int,
