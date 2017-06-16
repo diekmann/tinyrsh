@@ -11,15 +11,20 @@
 
 #define IS_BADF(retval) {badf_errno &= (retval == -1 && errno == EBADF);}
 
-static void try_proc_fd(int fd){
+
+#define OUTBUF_SIZE 1024
+static char outbuf[OUTBUF_SIZE];
+
+//returns a pointer to outbuf. Not multithreded!
+static char* try_proc_fd(int fd){
 	int written;
 	char buf[256];
-	char outbuf[1024] = {0};
+    memset(outbuf, 0, OUTBUF_SIZE);
 	written = snprintf(buf, 256, "/proc/self/fd/%d", fd);
 	assert(written > 0 && written < 255);
-	written = readlink(buf, outbuf, 1024);
-	assert(written > 0 && written < 1024);
-	printf("%s\n", outbuf);
+	written = readlink(buf, outbuf, OUTBUF_SIZE);
+	assert(written > 0 && written < OUTBUF_SIZE);
+	return outbuf;
 }
 
 int main(int argc, char **argv){
@@ -46,9 +51,14 @@ int main(int argc, char **argv){
 		haslock = fcntl(fd, F_GETLK, &flock);
 		IS_BADF(haslock);
 
-		//memset(&flock_nonposix, 0, sizeof(flock_nonposix));
-		//haslock_nonposix= fcntl(fd, F_OFD_GETLK, &flock_nonposix);
-		//IS_BADF(haslock_nonposix);
+#ifndef F_OFD_GETLK
+#error "fix no F_OFD_GETLK"
+		haslock_nonposix = 0;
+#else
+		memset(&flock_nonposix, 0, sizeof(flock_nonposix));
+		haslock_nonposix = fcntl(fd, F_OFD_GETLK, &flock_nonposix);
+		IS_BADF(haslock_nonposix);
+#endif
 
 		sigpidrecv = fcntl(fd, F_GETOWN);
 		IS_BADF(sigpidrecv)
@@ -58,13 +68,13 @@ int main(int argc, char **argv){
 
 		if(!badf_errno){
 			assert(haslock == 0);
-			//assert(haslock_nonposix == 0);
-			printf("%d: %x %x %d %d %d\n", fd, flags, accmode,
+			assert(haslock_nonposix == 0);
+			printf("%d: %x %x %d %d %d %s\n", fd, flags, accmode,
 				flock.l_type == F_UNLCK,
 				//flock_nonposix.l_type == F_UNLCK,
 				sigpidrecv,
-				pipesize);
-			try_proc_fd(fd);
+				pipesize,
+			    try_proc_fd(fd));
 		}
 	
 	}

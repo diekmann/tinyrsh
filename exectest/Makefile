@@ -1,5 +1,11 @@
-CC=clang-3.9
-CFLAGS=-Wall -Weverything -Wno-unused-parameter -pedantic \
+#CC=clang-3.9
+#CFLAGS=-Wall -Weverything -Wno-unused-parameter -pedantic \
+#	-fsanitize=address \
+#	-fsanitize=undefined \
+#	-fno-omit-frame-pointer
+
+CC=gcc
+CFLAGS=-Wall -Wextra -Wno-unused-parameter -pedantic \
 	-fsanitize=address \
 	-fsanitize=undefined \
 	-fno-omit-frame-pointer
