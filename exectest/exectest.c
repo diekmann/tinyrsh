@@ -1,6 +1,7 @@
 #define _GNU_SOURCE
 
 #include <stdio.h>
+#include <ctype.h>
 #include <string.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -8,8 +9,17 @@
 #include <fcntl.h>
 #include <errno.h>
 #include <assert.h>
+#include <dirent.h>
 
 #define IS_BADF(retval) {badf_errno &= (retval == -1 && errno == EBADF);}
+
+static int FD_IS_ZERO(fd_set *set){
+    for(int i = 0; i < FD_SETSIZE; ++i){
+        if(FD_ISSET(i, set))
+            return 0;
+    }
+    return 1;
+}
 
 
 #define OUTBUF_SIZE 1024
@@ -36,6 +46,11 @@ int main(int argc, char **argv){
 
 	int flags, accmode, haslock, haslock_nonposix, sigpidrecv, pipesize;
 	struct flock flock, flock_nonposix;
+
+    // mark all fds we discovered by walking the fd numbers and double check with
+    // /proc/self/fd that we got all.
+    fd_set handled_fds;
+    FD_ZERO(&handled_fds);
 
 	for(int fd = 0; fd < (int)max_fd; ++fd){
 		//set to one if EBADF
@@ -75,9 +90,31 @@ int main(int argc, char **argv){
 				sigpidrecv,
 				pipesize,
 			    try_proc_fd(fd));
+            FD_SET(fd, &handled_fds);
 		}
 	
 	}
+
+    DIR *procdir = opendir("/proc/self/fd");
+    assert(procdir);
+    struct dirent *entry;
+    while((entry = readdir(procdir)) != NULL){
+        if(strncmp(entry->d_name, ".", 255) == 0 || strncmp(entry->d_name, "..", 255) == 0){
+            continue;
+        }
+        assert(strnlen(entry->d_name, 255) <= 5);
+        for(char *c = entry->d_name; *c; ++c){
+            assert(isdigit(*c));
+        }
+        int fd = atoi(entry->d_name);
+        if(fd == dirfd(procdir)){
+            continue;
+        }
+        assert(FD_ISSET(fd, &handled_fds));
+        FD_CLR(fd, &handled_fds);
+    }
+    closedir(procdir);
+    assert(FD_IS_ZERO(&handled_fds)); //all fds which are listed in /proc were also found by our fd fcntl enumeration
 
 
 	return 0;
